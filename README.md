@@ -1,1 +1,7 @@
 # BudgetBuddy
+
+Managing finances as a college student can be challenging, with tuition fees, rent, groceries, social events, and unexpected expenses creating financial strain. BudgetBuddy is an intelligent expense tracking and budgeting application designed specifically to help college students manage their finances efficiently and develop responsible spending habits.
+
+The primary goal of BudgetBuddy is to provide students with an AI-powered financial management tool that tracks expenses, suggests personalized savings strategies, and streamlines shared expense management for roommates and friends. Unlike generic budgeting applications, BudgetBuddy is tailored for student life, offering features such as automated roommate bill-splitting, event expense planning, and customized budgeting based on financial aid, scholarships, and part-time jobs.
+
+By digitizing financial tracking, BudgetBuddy eliminates the hassle of manual budget management, encourages smart financial decisions, and empowers students to take control of their money. The system integrates AI-driven spending insights, automated reminders for upcoming payments, and real-time deal recommendations to help students save more and spend wisely. With a user-friendly interface and student-centric features, BudgetBuddy serves as a practical financial tool that simplifies expense tracking, promotes financial literacy, and enhances money management for college students.
