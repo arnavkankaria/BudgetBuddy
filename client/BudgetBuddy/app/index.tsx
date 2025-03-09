@@ -11,7 +11,7 @@ export default function Index() {
       console.log("Logging in user:", username);
       setUser(username); // Simulating login
     } else {
-      console.log("Please enter username and password.");
+      console.log(process.env.EXPO_PUBLIC_FIREBASE_API_KEY);
     }
   };
 
