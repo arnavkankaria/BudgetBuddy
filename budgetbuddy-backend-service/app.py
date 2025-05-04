@@ -1,27 +1,14 @@
-# app.py
-from flask import Flask, request, jsonify
-from services.firebase_service import db, verify_user_token
+from flask import Flask
+from controllers.auth_routes import auth_bp
+from controllers.expense_routes import expense_bp
+# Add others as needed (budget_bp, report_bp, etc.)
 
 app = Flask(__name__)
 
-@app.route("/add_expense", methods=["POST"])
-def add_expense():
-    token = request.headers.get("Authorization")
-    user_id = verify_user_token(token)
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    data = request.get_json()
-    expense = {
-        "user_id": user_id,
-        "amount": data.get("amount"),
-        "category": data.get("category"),
-        "date": data.get("date"),
-        "method": data.get("method"),
-        "notes": data.get("notes", "")
-    }
-    db.collection("expenses").add(expense)
-    return jsonify({"status": "Expense added"}), 200
+# Register blueprints
+app.register_blueprint(auth_bp, url_prefix="/auth")
+app.register_blueprint(expense_bp, url_prefix="/expenses")
+# app.register_blueprint(budget_bp, url_prefix="/budget")  # when ready
 
 if __name__ == "__main__":
     app.run(debug=True)
