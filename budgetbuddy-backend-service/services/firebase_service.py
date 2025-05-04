@@ -5,7 +5,7 @@ from firebase_admin import credentials, auth, firestore
 class FirebaseService:
     def __init__(self):
         if not firebase_admin._apps:
-            cred = credentials.Certificate("budgetbuddy-backend-service/firebase_key.json")
+            cred = credentials.Certificate("firebase_key.json")
             firebase_admin.initialize_app(cred)
 
         self.db = firestore.client()
