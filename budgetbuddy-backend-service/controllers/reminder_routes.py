@@ -26,3 +26,8 @@ def delete_reminder(reminder_id):
     token = request.headers.get("Authorization")
     return ReminderService.delete_reminder(reminder_id, token)
 
+@reminder_bp.route("/", methods=["GET"])
+def list_reminders():
+    token = request.headers.get("Authorization")
+    return ReminderService.list_reminders(token)
+

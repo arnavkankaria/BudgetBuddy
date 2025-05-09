@@ -43,11 +43,31 @@ class DataService:
 
         try:
             if filename.endswith(".json"):
-                data = json.loads(content)
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError:
+                    return jsonify({"error": "Invalid JSON format"}), 400
             elif filename.endswith(".csv"):
                 content_str = content.decode()
-                reader = csv.DictReader(io.StringIO(content_str))
-                data = list(reader)
+                try:
+                    reader = csv.DictReader(io.StringIO(content_str))
+                    data = list(reader)
+
+                    for record in data:
+                        # Basic validation
+                        if "amount" not in record or "category" not in record or "date" not in record or "method" not in record:
+                            return jsonify({"error": "CSV format error: missing required fields"}), 400
+
+                        record["amount"] = float(record["amount"])  # this may still raise
+                        record["user_id"] = uid
+                        record["notes"] = record.get("notes", "")
+                        cls.firebase.db.collection("expenses").document().set(record)
+
+                except ValueError:
+                    return jsonify({"error": "CSV format error: invalid amount field"}), 400
+                except Exception:
+                    return jsonify({"error": "CSV format error"}), 400
+
             else:
                 return jsonify({"error": "Unsupported file type"}), 400
 

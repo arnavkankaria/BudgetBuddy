@@ -79,5 +79,15 @@ class ReminderService:
 
         doc_ref.delete()
         return jsonify({"message": "Reminder deleted"}), 200
+    
+    @classmethod
+    def list_reminders(cls, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        reminders = cls.firebase.db.collection("reminders").where("user_id", "==", uid).stream()
+        result = [{"id": doc.id, **doc.to_dict()} for doc in reminders]
+        return jsonify(result), 200
 
 

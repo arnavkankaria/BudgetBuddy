@@ -24,7 +24,11 @@ class ReportService:
 
         for doc in expenses:
             e = doc.to_dict()
-            e_date = datetime.strptime(e["date"], "%Y-%m-%d")
+            try:
+                e_date = datetime.strptime(e["date"], "%Y-%m-%d")
+            except ValueError:
+                continue
+
             if start_date <= e_date <= end_date:
                 summary[e["category"]] += float(e["amount"])
 
@@ -73,6 +77,11 @@ class ReportService:
         if not uid:
             return jsonify({"error": "Unauthorized"}), 401
 
+        try:
+            datetime.strptime(month + "-01", "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "Invalid month format. Use YYYY-MM."}), 400
+
         response = cls.generate_monthly_report(token, month)
         summary = response[0].json["summary"]
 
@@ -87,3 +96,4 @@ class ReportService:
             download_name=f"BudgetBuddy_Report_{month}.pdf",
             mimetype="application/pdf"
         )
+
