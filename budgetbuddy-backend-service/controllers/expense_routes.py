@@ -24,3 +24,10 @@ def delete_expense(expense_id):
 def list_expenses():
     token = request.headers.get("Authorization")
     return ExpenseService.list_expenses(token)
+
+@expense_bp.route("/filter", methods=["GET"])
+def filter_by_category():
+    token = request.headers.get("Authorization")
+    category = request.args.get("category")
+    return ExpenseService.filter_by_category(token, category)
+

@@ -5,3 +5,12 @@ class Expense:
         self.date = date
         self.method = method
         self.notes = notes
+
+    def to_dict(self):
+        return {
+            'amount': self.amount,
+            'category': self.category,
+            'date': self.date,
+            'method': self.method,
+            'notes': self.notes
+        }
