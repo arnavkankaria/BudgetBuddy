@@ -2,6 +2,10 @@ import unittest
 from unittest.mock import patch, MagicMock
 from flask import Flask
 from services.expense_service import ExpenseService
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 app = Flask(__name__)
 
@@ -107,6 +111,110 @@ class TestExpenseService(unittest.TestCase):
             response, status = ExpenseService.edit_expense(self.expense_id, self.valid_expense, self.token)
             self.assertEqual(status, 401)
             self.assertEqual(response.json["error"], "Unauthorized")
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_edit_expense_not_found(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = self.user_id
+        doc = MagicMock()
+        doc.exists = False
+        mock_firebase.db.collection.return_value.document.return_value.get.return_value = doc
+
+        with app.app_context():
+            response, status = ExpenseService.edit_expense(self.expense_id, self.valid_expense, self.token)
+            self.assertEqual(status, 404)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_check_and_notify_budget_exact_match(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = self.user_id
+
+        # Budget = 100, Spend = 100 → should not trigger alert
+        mock_firebase.db.collection.return_value.where.return_value.stream.side_effect = [
+            iter([MagicMock(to_dict=lambda: {"amount": 100, "category": "Food", "date": "2025-05-01"})]),  # expenses
+            iter([MagicMock(to_dict=lambda: {
+                "user_id": self.user_id,
+                "amount": 100,
+                "category": "Food",
+                "start_date": "2025-05-01",
+                "end_date": "2025-05-31"
+            })]),  # budgets
+            iter([MagicMock(to_dict=lambda: {"email": "test@example.com"})])  # user
+        ]
+
+        with app.app_context():
+            # You don’t need to assert anything; test just ensures no crash/log error
+            ExpenseService._check_and_notify(self.user_id, "Food")
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_add_expense_unauthorized(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = None
+        with app.app_context():
+            response, status = ExpenseService.add_expense(self.valid_expense, "bad_token")
+            self.assertEqual(status, 401)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_edit_expense_no_valid_fields(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = self.user_id
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {"user_id": self.user_id}
+        mock_firebase.db.collection.return_value.document.return_value.get.return_value = doc
+
+        with app.app_context():
+            response, status = ExpenseService.edit_expense(self.expense_id, {"invalid": 123}, self.token)
+            self.assertEqual(status, 400)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_delete_expense_not_found(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = self.user_id
+        doc = MagicMock()
+        doc.exists = False
+        mock_firebase.db.collection.return_value.document.return_value.get.return_value = doc
+
+        with app.app_context():
+            response, status = ExpenseService.delete_expense(self.expense_id, self.token)
+            self.assertEqual(status, 404)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_delete_expense_success(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = self.user_id
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {"user_id": self.user_id}
+        mock_firebase.db.collection.return_value.document.return_value.get.return_value = doc
+        mock_firebase.db.collection.return_value.document.return_value.delete.return_value = None
+
+        with app.app_context():
+            response, status = ExpenseService.delete_expense(self.expense_id, self.token)
+            self.assertEqual(status, 200)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_list_expenses_unauthorized(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = None
+        with app.app_context():
+            response, status = ExpenseService.list_expenses("bad_token")
+            self.assertEqual(status, 401)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_filter_by_category_unauthorized(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = None
+        with app.app_context():
+            response, status = ExpenseService.filter_by_category("bad_token", "Food")
+            self.assertEqual(status, 401)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_filter_by_date_unauthorized(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = None
+        with app.app_context():
+            response, status = ExpenseService.filter_by_date("bad_token", "2025-05-01")
+            self.assertEqual(status, 401)
+
+    @patch("services.expense_service.ExpenseService.firebase")
+    def test_filter_by_method_unauthorized(self, mock_firebase):
+        mock_firebase.verify_user_token.return_value = None
+        with app.app_context():
+            response, status = ExpenseService.filter_by_method("bad_token", "Card")
+            self.assertEqual(status, 401)
+
 
 if __name__ == "__main__":
     unittest.main()
