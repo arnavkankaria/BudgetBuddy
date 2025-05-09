@@ -115,4 +115,32 @@ class ExpenseService:
 
         result = [{"id": doc.id, **doc.to_dict()} for doc in expenses]
         return jsonify(result), 200
+    
+    @classmethod
+    def filter_by_date(cls, token, date_str):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        expenses = cls.firebase.db.collection("expenses") \
+            .where("user_id", "==", uid) \
+            .where("date", "==", date_str).stream()
+
+        result = [{"id": doc.id, **doc.to_dict()} for doc in expenses]
+        return jsonify(result), 200
+    
+    @classmethod
+    def filter_by_method(cls, token, method):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        expenses = cls.firebase.db.collection("expenses") \
+            .where("user_id", "==", uid) \
+            .where("method", "==", method).stream()
+
+        result = [{"id": doc.id, **doc.to_dict()} for doc in expenses]
+        return jsonify(result), 200
+
+
 

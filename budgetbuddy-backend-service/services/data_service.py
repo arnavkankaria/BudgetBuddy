@@ -43,7 +43,10 @@ class DataService:
 
         try:
             if filename.endswith(".json"):
-                data = json.loads(content)
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError:
+                    return jsonify({"error": "Invalid JSON format"}), 400
             elif filename.endswith(".csv"):
                 content_str = content.decode()
                 reader = csv.DictReader(io.StringIO(content_str))
