@@ -1,57 +1,60 @@
 from flask import jsonify
 from datetime import datetime
 from services.firebase_service import FirebaseService
+import uuid
 
-class BudgetService:
+class ReminderService:
 
     firebase = FirebaseService()
 
     @classmethod
-    def set_budget(cls, data, token):
+    def set_reminder(cls, token, data):
         uid = cls.firebase.verify_user_token(token)
         if not uid:
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Period validation
-        period = data.get("period")
-        if period not in ["weekly", "monthly", "custom"]:
-            return jsonify({"error": "Invalid period"}), 400
+        required_fields = ["title", "day", "message"]
+        if not all(k in data for k in required_fields):
+            return jsonify({"error": "Missing fields"}), 400
 
-        budget = {
+        reminder = {
             "user_id": uid,
-            "amount": data["amount"],
-            "period": period,
-            "category": data.get("category", "overall"),
-            "start_date": data.get("start_date", str(datetime.now().date())),
-            "end_date": data.get("end_date") if period == "custom" else None
+            "title": data["title"],
+            "day": int(data["day"]),  # day of month
+            "message": data["message"],
+            "created_at": datetime.utcnow().isoformat()
         }
 
-        cls.firebase.db.collection("budgets").add(budget)
-        return jsonify({"message": "Budget set"}), 201
-    
+        cls.firebase.db.collection("reminders").document(str(uuid.uuid4())).set(reminder)
+        return jsonify({"message": "Reminder created"}), 201
+
     @classmethod
-    def get_budgets(cls, token):
+    def set_notification_preferences(cls, token, data):
         uid = cls.firebase.verify_user_token(token)
         if not uid:
             return jsonify({"error": "Unauthorized"}), 401
 
-        budgets = cls.firebase.db.collection("budgets").where("user_id", "==", uid).stream()
-        result = [{"id": doc.id, **doc.to_dict()} for doc in budgets]
-        return jsonify(result), 200
+        prefs = {
+            "email_enabled": data.get("email_enabled", True),
+            "sms_enabled": data.get("sms_enabled", False)
+        }
+
+        cls.firebase.db.collection("notification_preferences").document(uid).set(prefs)
+        return jsonify({"message": "Preferences saved"}), 200
     
     @classmethod
-    def edit_budget(cls, budget_id, data, token):
+    def edit_reminder(cls, reminder_id, data, token):
         uid = cls.firebase.verify_user_token(token)
         if not uid:
             return jsonify({"error": "Unauthorized"}), 401
 
-        doc_ref = cls.firebase.db.collection("budgets").document(budget_id)
+        doc_ref = cls.firebase.db.collection("reminders").document(reminder_id)
         doc = doc_ref.get()
         if not doc.exists or doc.to_dict().get("user_id") != uid:
             return jsonify({"error": "Not found or unauthorized"}), 404
 
+        allowed_fields = ["title", "day", "message", "active"]
         update_fields = {}
-        allowed_fields = ["amount", "category", "period", "start_date", "end_date"]
 
         for field in allowed_fields:
             if field in data:
@@ -61,21 +64,20 @@ class BudgetService:
             return jsonify({"error": "No valid fields to update"}), 400
 
         doc_ref.update(update_fields)
-        return jsonify({"message": "Budget updated"}), 200
+        return jsonify({"message": "Reminder updated"}), 200
     
     @classmethod
-    def delete_budget(cls, budget_id, token):
+    def delete_reminder(cls, reminder_id, token):
         uid = cls.firebase.verify_user_token(token)
         if not uid:
             return jsonify({"error": "Unauthorized"}), 401
 
-        doc_ref = cls.firebase.db.collection("budgets").document(budget_id)
+        doc_ref = cls.firebase.db.collection("reminders").document(reminder_id)
         doc = doc_ref.get()
         if not doc.exists or doc.to_dict().get("user_id") != uid:
             return jsonify({"error": "Not found or unauthorized"}), 404
 
         doc_ref.delete()
-        return jsonify({"message": "Budget deleted"}), 200
-
+        return jsonify({"message": "Reminder deleted"}), 200
 
 

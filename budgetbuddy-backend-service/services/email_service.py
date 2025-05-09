@@ -24,3 +24,18 @@ class EmailService:
                 server.send_message(msg)
         except Exception as e:
             print(f"[Email Error] Failed to send email: {e}")
+
+    @classmethod
+    def send_custom_notification(cls, to_email, subject, body):
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = cls.SMTP_USERNAME
+        msg["To"] = to_email
+
+        try:
+            with smtplib.SMTP(cls.SMTP_SERVER, cls.SMTP_PORT) as server:
+                server.starttls()
+                server.login(cls.SMTP_USERNAME, cls.SMTP_PASSWORD)
+                server.send_message(msg)
+        except Exception as e:
+            print(f"[Reminder Email Error] {e}")
