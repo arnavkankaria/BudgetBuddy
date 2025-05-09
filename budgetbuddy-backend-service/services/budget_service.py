@@ -28,3 +28,54 @@ class BudgetService:
 
         cls.firebase.db.collection("budgets").add(budget)
         return jsonify({"message": "Budget set"}), 201
+    
+    @classmethod
+    def get_budgets(cls, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        budgets = cls.firebase.db.collection("budgets").where("user_id", "==", uid).stream()
+        result = [{"id": doc.id, **doc.to_dict()} for doc in budgets]
+        return jsonify(result), 200
+    
+    @classmethod
+    def edit_budget(cls, budget_id, data, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        doc_ref = cls.firebase.db.collection("budgets").document(budget_id)
+        doc = doc_ref.get()
+        if not doc.exists or doc.to_dict().get("user_id") != uid:
+            return jsonify({"error": "Not found or unauthorized"}), 404
+
+        update_fields = {}
+        allowed_fields = ["amount", "category", "period", "start_date", "end_date"]
+
+        for field in allowed_fields:
+            if field in data:
+                update_fields[field] = data[field]
+
+        if not update_fields:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        doc_ref.update(update_fields)
+        return jsonify({"message": "Budget updated"}), 200
+    
+    @classmethod
+    def delete_budget(cls, budget_id, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        doc_ref = cls.firebase.db.collection("budgets").document(budget_id)
+        doc = doc_ref.get()
+        if not doc.exists or doc.to_dict().get("user_id") != uid:
+            return jsonify({"error": "Not found or unauthorized"}), 404
+
+        doc_ref.delete()
+        return jsonify({"message": "Budget deleted"}), 200
+
+
+
