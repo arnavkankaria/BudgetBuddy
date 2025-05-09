@@ -3,3 +3,4 @@ class Budget:
         self.category = category
         self.amount = amount
         self.period = period
+
