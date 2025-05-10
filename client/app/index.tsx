@@ -1,7 +1,5 @@
-import { Redirect } from 'expo-router';
-import { useAuth } from '../context/AuthContext';
+import Landing from './landing';
 
 export default function Index() {
-  const { user } = useAuth();
-  return <Redirect href={user ? '/(app)' : '/(auth)/sign-in'} />;
+  return <Landing />;
 }
