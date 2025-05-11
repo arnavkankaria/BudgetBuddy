@@ -1,63 +1,111 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import {
-  VictoryPie,
-  VictoryBar,
-  VictoryChart,
-  VictoryAxis,
-  VictoryTheme,
-  VictoryLabel,
-} from 'victory-native';
+import { LineChart, BarChart } from 'react-native-chart-kit';
+import { Ionicons } from '@expo/vector-icons';
 
-// Mock data - replace with actual data from your backend
-const mockData = {
-  categorySpending: [
-    { x: 'Food', y: 400 },
-    { x: 'Transport', y: 200 },
-    { x: 'Entertainment', y: 300 },
-    { x: 'Shopping', y: 300 },
-    { x: 'Bills', y: 1000 },
-    { x: 'Education', y: 400 },
-    { x: 'Health', y: 200 },
-    { x: 'Other', y: 100 },
-  ],
-  monthlySpending: [
-    { x: 'Jan', y: 1200 },
-    { x: 'Feb', y: 1500 },
-    { x: 'Mar', y: 1800 },
-    { x: 'Apr', y: 1400 },
-    { x: 'May', y: 1600 },
-    { x: 'Jun', y: 1900 },
-  ],
+const screenWidth = Dimensions.get('window').width - 40; // Account for padding
+
+interface CategorySpending {
+  category: string;
+  amount: number;
+}
+
+interface MonthlySpending {
+  month: string;
+  amount: number;
+}
+
+interface Insights {
+  [category: string]: string;
+}
+
+// Dummy data for testing
+const dummyCategorySpending: CategorySpending[] = [
+  { category: 'Food', amount: 450 },
+  { category: 'Transport', amount: 200 },
+  { category: 'Entertainment', amount: 300 },
+  { category: 'Shopping', amount: 250 },
+  { category: 'Bills', amount: 800 },
+  { category: 'Education', amount: 400 },
+];
+
+const dummyMonthlySpending: MonthlySpending[] = [
+  { month: 'Jan', amount: 1200 },
+  { month: 'Feb', amount: 1500 },
+  { month: 'Mar', amount: 1800 },
+  { month: 'Apr', amount: 1400 },
+  { month: 'May', amount: 1600 },
+  { month: 'Jun', amount: 1900 },
+];
+
+const dummyInsights: Insights = {
+  'Food': '20% higher than last month',
+  'Transport': '15% lower than average',
+  'Entertainment': 'On track with budget',
+  'Shopping': '10% over budget',
+  'Bills': 'Consistent with previous months',
 };
-
-const screenWidth = Dimensions.get('window').width;
 
 export default function Analytics() {
   const { theme } = useTheme();
-  const [timeRange, setTimeRange] = useState('month');
+  const [timeRange, setTimeRange] = useState('week');
+  const [loading, setLoading] = useState(true);
+  const [categorySpending, setCategorySpending] = useState<CategorySpending[]>(dummyCategorySpending);
+  const [monthlySpending, setMonthlySpending] = useState<MonthlySpending[]>(dummyMonthlySpending);
+  const [insights, setInsights] = useState<Insights>(dummyInsights);
 
-  const colorScale = [
-    theme.colors.primary,
-    theme.colors.secondary,
-    theme.colors.success,
-    theme.colors.warning,
-    theme.colors.error,
-    '#FF9500',
-    '#5856D6',
-    '#FF2D55',
-  ];
+  useEffect(() => {
+    // Simulate loading
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [timeRange]);
+
+  const chartConfig = {
+    backgroundGradientFrom: theme.colors.card,
+    backgroundGradientTo: theme.colors.card,
+    color: (opacity = 1) => theme.colors.primary,
+    strokeWidth: 2,
+    barPercentage: 0.5,
+    useShadowColorFromDataset: false,
+    decimalPlaces: 0,
+    labelColor: (opacity = 1) => theme.colors.text,
+    propsForDots: {
+      r: '6',
+      strokeWidth: '2',
+      stroke: theme.colors.primary,
+    },
+  };
+
+  // Calculate the width for the chart to fit inside the card
+  const CARD_MARGIN = 20 * 2; // left + right
+  const CARD_PADDING = 20 * 2; // left + right
+  const chartWidth = Dimensions.get('window').width - CARD_MARGIN - CARD_PADDING;
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+    >
       <View style={[styles.header, { backgroundColor: theme.colors.card }]}>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
           Spending Analytics
@@ -90,90 +138,63 @@ export default function Analytics() {
         </View>
       </View>
 
-      <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-          Spending by Category
-        </Text>
-        <View style={styles.pieChartContainer}>
-          <VictoryPie
-            standalone={true}
-            data={mockData.categorySpending}
-            colorScale={colorScale}
-            width={screenWidth - 40}
-            height={300}
-            innerRadius={70}
-            labelRadius={70 + 40}
-            style={{ 
-              labels: { fill: theme.colors.text, fontSize: 12 }
-            }}
-            labelComponent={
-              <VictoryLabel
-                style={{ fill: theme.colors.text }}
-                text={({ datum }) => `${datum.x}\n$${datum.y}`}
-              />
-            }
-          />
-        </View>
-      </View>
-
-      <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+      <View style={[styles.chartCard, { backgroundColor: theme.colors.card, overflow: 'hidden' }]}>
         <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
           Monthly Spending Trend
         </Text>
-        <View style={styles.barChartContainer}>
-          <VictoryChart
-            standalone={true}
-            width={screenWidth - 40}
-            height={300}
-            padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
-            theme={VictoryTheme.material}
-          >
-            <VictoryAxis
-              style={{
-                axis: { stroke: theme.colors.text },
-                ticks: { stroke: theme.colors.text },
-                tickLabels: { fill: theme.colors.text },
-              }}
-            />
-            <VictoryAxis
-              dependentAxis
-              style={{
-                axis: { stroke: theme.colors.text },
-                ticks: { stroke: theme.colors.text },
-                tickLabels: { fill: theme.colors.text },
-              }}
-            />
-            <VictoryBar
-              data={mockData.monthlySpending}
-              style={{
-                data: {
-                  fill: theme.colors.primary,
-                },
-              }}
-            />
-          </VictoryChart>
-        </View>
+        <LineChart
+          data={{
+            labels: monthlySpending.map(item => item.month),
+            datasets: [{
+              data: monthlySpending.map(item => item.amount),
+            }],
+          }}
+          width={chartWidth}
+          height={220}
+          chartConfig={chartConfig}
+          bezier
+          style={styles.chart}
+        />
+      </View>
+
+      <View style={[styles.chartCard, { backgroundColor: theme.colors.card, overflow: 'hidden' }]}>
+        <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
+          Spending by Category
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <BarChart
+            data={{
+              labels: categorySpending.map(item => item.category),
+              datasets: [{
+                data: categorySpending.map(item => item.amount),
+              }],
+            }}
+            width={Math.max(chartWidth, categorySpending.length * 80)}
+            height={260}
+            chartConfig={chartConfig}
+            style={styles.chart}
+            showValuesOnTopOfBars
+          />
+        </ScrollView>
       </View>
 
       <View style={[styles.insightsCard, { backgroundColor: theme.colors.card }]}>
         <Text style={[styles.insightsTitle, { color: theme.colors.text }]}>
           Spending Insights
         </Text>
-        <View style={styles.insightItem}>
-          <Text style={[styles.insightText, { color: theme.colors.text }]}>
-            • Your highest spending category is Bills (${mockData.categorySpending[4].y})
-          </Text>
-        </View>
-        <View style={styles.insightItem}>
-          <Text style={[styles.insightText, { color: theme.colors.text }]}>
-            • You've spent 20% more this month compared to last month
-          </Text>
-        </View>
-        <View style={styles.insightItem}>
-          <Text style={[styles.insightText, { color: theme.colors.text }]}>
-            • Consider reducing Entertainment expenses to stay within budget
-          </Text>
-        </View>
+        {Object.entries(insights).map(([category, insight], index) => (
+          <View key={index} style={styles.insightItem}>
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color={theme.colors.primary}
+              style={styles.insightIcon}
+            />
+            <Text style={[styles.insightText, { color: theme.colors.text }]}>
+              {category}: {insight}
+            </Text>
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
@@ -182,6 +203,9 @@ export default function Analytics() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 20,
   },
   header: {
     padding: 20,
@@ -220,11 +244,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 15,
   },
-  pieChartContainer: {
-    alignItems: 'center',
-  },
-  barChartContainer: {
-    alignItems: 'center',
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
   },
   insightsCard: {
     margin: 20,
@@ -242,10 +264,16 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   insightItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 10,
+  },
+  insightIcon: {
+    marginRight: 10,
   },
   insightText: {
     fontSize: 16,
     lineHeight: 24,
+    flex: 1,
   },
 }); 
