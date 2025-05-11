@@ -6,12 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import Modal from 'react-native-modal';
+import * as Linking from 'expo-linking';
 
 // Mock data - replace with actual data from your backend
 const mockData = {
@@ -33,6 +35,8 @@ const mockData = {
   ],
 };
 
+const BACKEND_URL = 'http://localhost:5000'; // Change to your backend URL if needed
+
 export default function Home() {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -40,6 +44,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [reportModalVisible, setReportModalVisible] = React.useState(false);
   const [selectedMonth, setSelectedMonth] = React.useState('');
+  const [loadingReport, setLoadingReport] = React.useState(false);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -69,6 +74,33 @@ export default function Home() {
       });
     }
     return months;
+  };
+
+  const handleGenerateReport = async () => {
+    if (!selectedMonth) return;
+    setLoadingReport(true);
+    try {
+      // You may need to add authentication headers if your backend requires it
+      const response = await fetch(`${BACKEND_URL}/report/monthly/pdf?month=${selectedMonth}`, {
+        method: 'GET',
+        headers: {
+          // 'Authorization': 'Bearer ...',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to generate report');
+      // If backend returns a file URL
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      Linking.openURL(url);
+      // If backend returns a direct URL, use:
+      // const { url } = await response.json();
+      // Linking.openURL(url);
+    } catch (err) {
+      Alert.alert('Error', 'Could not generate report.');
+    } finally {
+      setLoadingReport(false);
+      setReportModalVisible(false);
+    }
   };
 
   return (
@@ -208,11 +240,10 @@ export default function Home() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { backgroundColor: theme.colors.success }]}
-              // TODO: Add API call to generate PDF
-              onPress={() => setReportModalVisible(false)}
-              disabled={!selectedMonth}
+              onPress={handleGenerateReport}
+              disabled={!selectedMonth || loadingReport}
             >
-              <Text style={styles.modalButtonText}>Generate</Text>
+              <Text style={styles.modalButtonText}>{loadingReport ? 'Generating...' : 'Generate'}</Text>
             </TouchableOpacity>
           </View>
         </View>
