@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import Slider from '@react-native-community/slider';
+import { Ionicons } from '@expo/vector-icons';
 
 // Mock data - replace with actual data from your backend
 const initialCategories = [
@@ -29,6 +31,10 @@ export default function Budget() {
   const [totalBudget, setTotalBudget] = useState(
     categories.reduce((sum, cat) => sum + cat.budget, 0)
   );
+  const [customizeModalVisible, setCustomizeModalVisible] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState<number | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
 
   const handleBudgetChange = (categoryId: number, newBudget: number) => {
     const updatedCategories = categories.map((cat) =>
@@ -36,6 +42,43 @@ export default function Budget() {
     );
     setCategories(updatedCategories);
     setTotalBudget(updatedCategories.reduce((sum, cat) => sum + cat.budget, 0));
+  };
+
+  const handleAddCategory = () => {
+    if (!newCategory.trim()) return;
+    setCategories([
+      ...categories.slice(0, -1), // keep 'Other' last
+      {
+        id: Date.now(),
+        name: newCategory.trim(),
+        budget: 0,
+        spent: 0,
+      },
+      categories[categories.length - 1], // 'Other'
+    ]);
+    setNewCategory('');
+  };
+
+  const handleDeleteCategory = (id: number) => {
+    setCategories(categories.filter((cat) => cat.id !== id));
+  };
+
+  const handleEditCategory = (id: number, name: string) => {
+    setEditCategoryId(id);
+    setEditCategoryName(name);
+  };
+
+  const handleSaveEditCategory = () => {
+    setCategories(categories.map((cat) =>
+      cat.id === editCategoryId ? { ...cat, name: editCategoryName } : cat
+    ));
+    setEditCategoryId(null);
+    setEditCategoryName('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditCategoryId(null);
+    setEditCategoryName('');
   };
 
   const getProgressColor = (spent: number, budget: number) => {
@@ -60,7 +103,13 @@ export default function Budget() {
           ${totalBudget}
         </Text>
       </View>
-
+      <TouchableOpacity
+        style={[styles.customizeButton, { backgroundColor: theme.colors.secondary }]}
+        onPress={() => setCustomizeModalVisible(true)}
+      >
+        <Ionicons name="settings-outline" size={18} color="#fff" />
+        <Text style={styles.customizeButtonText}>Customize Categories</Text>
+      </TouchableOpacity>
       <View style={styles.categoriesContainer}>
         {categories.map((category) => (
           <View
@@ -116,6 +165,73 @@ export default function Budget() {
       >
         <Text style={styles.saveButtonText}>Save Budget</Text>
       </TouchableOpacity>
+      {/* Customize Categories Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={customizeModalVisible}
+        onRequestClose={() => setCustomizeModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Customize Categories</Text>
+            {categories.slice(0, -1).map((cat) => (
+              <View key={cat.id} style={styles.modalCategoryRow}>
+                {editCategoryId === cat.id ? (
+                  <>
+                    <TextInput
+                      style={[styles.input, { flex: 1, backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+                      value={editCategoryName}
+                      onChangeText={setEditCategoryName}
+                    />
+                    <TouchableOpacity onPress={handleSaveEditCategory} style={styles.modalActionButton}>
+                      <Ionicons name="checkmark" size={20} color={theme.colors.success} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleCancelEdit} style={styles.modalActionButton}>
+                      <Ionicons name="close" size={20} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.modalCategoryName, { color: theme.colors.text }]}>{cat.name}</Text>
+                    <TouchableOpacity onPress={() => handleEditCategory(cat.id, cat.name)} style={styles.modalActionButton}>
+                      <Ionicons name="pencil" size={18} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeleteCategory(cat.id)} style={styles.modalActionButton}>
+                      <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ))}
+            {/* 'Other' category always remains and is not editable/deletable */}
+            <View style={styles.modalCategoryRow}>
+              <Text style={[styles.modalCategoryName, { color: theme.colors.text }]}>Other</Text>
+              <Ionicons name="lock-closed-outline" size={18} color={theme.colors.text + '80'} />
+            </View>
+            <View style={styles.addCategoryRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+                placeholder="Add new category"
+                placeholderTextColor={theme.colors.text + '80'}
+                value={newCategory}
+                onChangeText={setNewCategory}
+              />
+              <TouchableOpacity onPress={handleAddCategory} style={styles.modalActionButton}>
+                <Ionicons name="add" size={22} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
+                onPress={() => setCustomizeModalVisible(false)}
+              >
+                <Text style={styles.saveButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -198,5 +314,64 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  customizeButton: {
+    margin: 20,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  customizeButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    width: '80%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  modalCategoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalCategoryName: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  modalActionButton: {
+    padding: 5,
+  },
+  addCategoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 20,
+  },
+  modalButton: {
+    padding: 15,
+    borderRadius: 8,
+    marginLeft: 10,
   },
 }); 

@@ -11,6 +11,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
+import Modal from 'react-native-modal';
 
 // Mock data - replace with actual data from your backend
 const mockData = {
@@ -37,6 +38,8 @@ export default function Home() {
   const { user } = useAuth();
   const router = useRouter();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [reportModalVisible, setReportModalVisible] = React.useState(false);
+  const [selectedMonth, setSelectedMonth] = React.useState('');
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -51,6 +54,21 @@ export default function Home() {
     if (percentage >= 90) return theme.colors.error;
     if (percentage >= 75) return theme.colors.warning;
     return theme.colors.success;
+  };
+
+  // Helper to get months up to last month
+  const getMonthOptions = () => {
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      if (i === 0) continue; // skip current month
+      months.push({
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      });
+    }
+    return months;
   };
 
   return (
@@ -160,6 +178,45 @@ export default function Home() {
           </View>
         ))}
       </View>
+      {/* Generate Monthly Report Button */}
+      <TouchableOpacity
+        style={[styles.reportButton, { backgroundColor: theme.colors.secondary }]}
+        onPress={() => setReportModalVisible(true)}
+      >
+        <Ionicons name="document-text-outline" size={20} color="#fff" />
+        <Text style={styles.reportButtonText}>Generate Monthly Report</Text>
+      </TouchableOpacity>
+      {/* Report Modal */}
+      <Modal isVisible={reportModalVisible} onBackdropPress={() => setReportModalVisible(false)}>
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}> 
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Month</Text>
+          {getMonthOptions().map((month) => (
+            <TouchableOpacity
+              key={month.value}
+              style={[styles.monthOption, selectedMonth === month.value && { backgroundColor: theme.colors.primary }]}
+              onPress={() => setSelectedMonth(month.value)}
+            >
+              <Text style={{ color: selectedMonth === month.value ? '#fff' : theme.colors.text }}>{month.label}</Text>
+            </TouchableOpacity>
+          ))}
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => setReportModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: theme.colors.success }]}
+              // TODO: Add API call to generate PDF
+              onPress={() => setReportModalVisible(false)}
+              disabled={!selectedMonth}
+            >
+              <Text style={styles.modalButtonText}>Generate</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -287,5 +344,61 @@ const styles = StyleSheet.create({
   expenseAmount: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  reportButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  modalContent: {
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  monthOption: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    width: 200,
+    alignItems: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 }); 
