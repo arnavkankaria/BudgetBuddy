@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -100,7 +100,6 @@ export default function Expenses() {
   };
 
   const handleAddRecurring = () => {
-    // Add the new recurring payment to the list (mock, ready for backend)
     setRecurringPayments([
       {
         id: recurringPayments.length + 1,
@@ -181,21 +180,12 @@ export default function Expenses() {
           {recurringPayments.map((rec) => (
             <View key={rec.id} style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}> 
               <View style={styles.expenseInfo}>
-                <Text style={[styles.expenseName, { color: theme.colors.text }]}>
-                  {rec.name}
-                </Text>
-                <Text style={[styles.expenseCategory, { color: theme.colors.text + '80' }]}>
-                  {rec.category} • {rec.recurrence.charAt(0).toUpperCase() + rec.recurrence.slice(1)} • Next: {rec.nextDate}
-                </Text>
+                <Text style={[styles.expenseName, { color: theme.colors.text }]}> {rec.name} </Text>
+                <Text style={[styles.expenseCategory, { color: theme.colors.text + '80' }]}> {rec.category} • {rec.recurrence?.charAt(0).toUpperCase() + rec.recurrence?.slice(1)} • Next: {rec.nextDate} </Text>
               </View>
               <View style={styles.expenseActions}>
-                <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}>
-                  -${rec.amount}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => handleDeleteRecurring(rec.id)}
-                  style={styles.deleteButton}
-                >
+                <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}> -${rec.amount} </Text>
+                <TouchableOpacity onPress={() => handleDeleteRecurring(rec.id)} style={styles.deleteButton}>
                   <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
                 </TouchableOpacity>
               </View>
