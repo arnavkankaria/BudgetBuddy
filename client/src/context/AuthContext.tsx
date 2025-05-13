@@ -1,13 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as firebaseSignOut,
-  User
-} from 'firebase/auth';
-import { firestoreService } from '../src/services/firestore';
+import auth from '@react-native-firebase/auth';
+import { firestoreService } from '../services/firestore';
 
 interface User {
   uid: string;
@@ -29,12 +22,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const auth = getAuth();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = auth().onAuthStateChanged((user) => {
       if (user) {
-        setUser(user);
+        setUser({
+          uid: user.uid,
+          email: user.email,
+        });
       } else {
         setUser(null);
       }
@@ -47,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
-      await signInWithEmailAndPassword(auth, email, password);
+      await auth().signInWithEmailAndPassword(email, password);
     } catch (error: any) {
       setError(error.message);
       throw error;
@@ -57,7 +52,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string) => {
     try {
       setError(null);
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      const user = userCredential.user;
+      
+      // Initialize user's Firestore collections
+      if (user) {
+        // Create empty collections for the new user
+        await firestoreService.addTransaction(user.uid, {
+          amount: 0,
+          category: 'initial',
+          date: new Date(),
+          description: 'Initial transaction',
+          type: 'income',
+        });
+        
+        await firestoreService.addBudget(user.uid, {
+          amount: 0,
+          category: 'initial',
+          period: 'monthly',
+          startDate: new Date(),
+        });
+      }
     } catch (error: any) {
       setError(error.message);
       throw error;
@@ -67,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setError(null);
-      await firebaseSignOut(auth);
+      await auth().signOut();
     } catch (error: any) {
       setError(error.message);
       throw error;
@@ -83,11 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

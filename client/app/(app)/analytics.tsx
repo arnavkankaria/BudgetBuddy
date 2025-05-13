@@ -6,14 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Dimensions,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+import { firestoreService } from '../../src/services/firestore';
+import { Transaction } from '../../src/types/transaction';
 
-const screenWidth = Dimensions.get('window').width - 40; // Account for padding
+const screenWidth = Dimensions.get('window').width - 40;
 
 interface CategorySpending {
   category: string;
@@ -26,72 +28,166 @@ interface MonthlySpending {
 }
 
 interface Insights {
-  [category: string]: string;
+  [key: string]: string;
 }
 
-// Dummy data for testing
-const dummyCategorySpending: CategorySpending[] = [
-  { category: 'Food', amount: 450 },
-  { category: 'Transport', amount: 200 },
-  { category: 'Entertainment', amount: 300 },
-  { category: 'Shopping', amount: 250 },
-  { category: 'Bills', amount: 800 },
-  { category: 'Education', amount: 400 },
-];
-
-const dummyMonthlySpending: MonthlySpending[] = [
-  { month: 'Jan', amount: 1200 },
-  { month: 'Feb', amount: 1500 },
-  { month: 'Mar', amount: 1800 },
-  { month: 'Apr', amount: 1400 },
-  { month: 'May', amount: 1600 },
-  { month: 'Jun', amount: 1900 },
-];
-
-const dummyInsights: Insights = {
-  'Food': '20% higher than last month',
-  'Transport': '15% lower than average',
-  'Entertainment': 'On track with budget',
-  'Shopping': '10% over budget',
-  'Bills': 'Consistent with previous months',
-};
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function Analytics() {
   const { theme } = useTheme();
-  const [timeRange, setTimeRange] = useState('week');
+  const { user } = useAuth();
+  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('week');
   const [loading, setLoading] = useState(true);
-  const [categorySpending, setCategorySpending] = useState<CategorySpending[]>(dummyCategorySpending);
-  const [monthlySpending, setMonthlySpending] = useState<MonthlySpending[]>(dummyMonthlySpending);
-  const [insights, setInsights] = useState<Insights>(dummyInsights);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categorySpending, setCategorySpending] = useState<CategorySpending[]>([]);
+  const [monthlySpending, setMonthlySpending] = useState<MonthlySpending[]>([]);
+  const [insights, setInsights] = useState<Insights>({});
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [timeRange]);
+    if (user) {
+      const unsubscribe = firestoreService.subscribeToTransactions(user.uid, (updatedTransactions) => {
+        setTransactions(updatedTransactions);
+        calculateAnalytics(updatedTransactions);
+      });
 
-  const chartConfig = {
-    backgroundGradientFrom: theme.colors.card,
-    backgroundGradientTo: theme.colors.card,
-    color: (opacity = 1) => theme.colors.primary,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
-    decimalPlaces: 0,
-    labelColor: (opacity = 1) => theme.colors.text,
-    propsForDots: {
-      r: '6',
-      strokeWidth: '2',
-      stroke: theme.colors.primary,
-    },
+      return () => unsubscribe();
+    }
+  }, [user, timeRange]);
+
+  const calculateAnalytics = (transactions: Transaction[]) => {
+    // Filter transactions based on time range
+    const now = new Date();
+    let startDate: Date;
+    switch (timeRange) {
+      case 'week':
+        startDate = new Date();
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date();
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'year':
+        startDate = new Date();
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate = new Date(0);
+    }
+
+    const filteredTransactions = transactions.filter(t => {
+      const transactionDate = t.date && typeof t.date.toDate === 'function' ? t.date.toDate() : new Date(t.date);
+      return transactionDate >= startDate;
+    });
+
+    // Calculate category spending
+    const categoryMap = new Map<string, number>();
+    filteredTransactions.forEach(t => {
+      if (t.type === 'expense') {
+        const current = categoryMap.get(t.category) || 0;
+        categoryMap.set(t.category, current + t.amount);
+      }
+    });
+
+    if (categoryMap.size === 0) {
+      categoryMap.set('No Expenses', 0);
+    }
+
+    const categorySpendingArray = Array.from(categoryMap.entries())
+      .map(([category, amount]) => ({
+        category,
+        amount: Math.max(0, amount),
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    setCategorySpending(categorySpendingArray);
+
+    // Calculate monthly spending
+    const monthlyMap = new Map<string, number>();
+    months.forEach(month => {
+      monthlyMap.set(month, 0);
+    });
+
+    filteredTransactions.forEach(t => {
+      if (t.type === 'expense') {
+        const transactionDate = t.date && typeof t.date.toDate === 'function' ? t.date.toDate() : new Date(t.date);
+        const month = transactionDate.toLocaleString('default', { month: 'short' });
+        const current = monthlyMap.get(month) || 0;
+        monthlyMap.set(month, current + t.amount);
+      }
+    });
+
+    const monthlySpendingArray = months
+      .map(month => ({
+        month,
+        amount: monthlyMap.get(month) || 0,
+      }));
+
+    setMonthlySpending(monthlySpendingArray);
+
+    // Calculate insights
+    const insights: Insights = {};
+    categorySpendingArray.forEach(({ category, amount }) => {
+      const previousPeriodAmount = calculatePreviousPeriodAmount(transactions, category, timeRange);
+      if (previousPeriodAmount > 0) {
+        const percentageChange = ((amount - previousPeriodAmount) / previousPeriodAmount) * 100;
+        if (percentageChange > 20) {
+          insights[category] = `${Math.round(percentageChange)}% higher than last period`;
+        } else if (percentageChange < -20) {
+          insights[category] = `${Math.round(Math.abs(percentageChange))}% lower than last period`;
+        } else {
+          insights[category] = 'On track with previous period';
+        }
+      } else {
+        insights[category] = amount > 0 ? 'New category' : 'No expenses yet';
+      }
+    });
+
+    setInsights(insights);
+    setLoading(false);
   };
 
-  // Calculate the width for the chart to fit inside the card
-  const CARD_MARGIN = 20 * 2; // left + right
-  const CARD_PADDING = 20 * 2; // left + right
-  const chartWidth = Dimensions.get('window').width - CARD_MARGIN - CARD_PADDING;
+  const calculatePreviousPeriodAmount = (
+    transactions: Transaction[],
+    category: string,
+    timeRange: string
+  ): number => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+
+    switch (timeRange) {
+      case 'week':
+        endDate = new Date();
+        endDate.setDate(now.getDate() - 7);
+        startDate = new Date();
+        startDate.setDate(now.getDate() - 14);
+        break;
+      case 'month':
+        endDate = new Date();
+        endDate.setMonth(now.getMonth() - 1);
+        startDate = new Date();
+        startDate.setMonth(now.getMonth() - 2);
+        break;
+      case 'year':
+        endDate = new Date();
+        endDate.setFullYear(now.getFullYear() - 1);
+        startDate = new Date();
+        startDate.setFullYear(now.getFullYear() - 2);
+        break;
+      default:
+        return 0;
+    }
+
+    return transactions
+      .filter(t =>
+        t.type === 'expense' &&
+        t.category === category &&
+        ((t.date && typeof t.date.toDate === 'function' ? t.date.toDate() : new Date(t.date)) >= startDate) &&
+        ((t.date && typeof t.date.toDate === 'function' ? t.date.toDate() : new Date(t.date)) < endDate)
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
 
   if (loading) {
     return (
@@ -101,100 +197,187 @@ export default function Analytics() {
     );
   }
 
+  const chartConfig = {
+    backgroundGradientFrom: theme.colors.background,
+    backgroundGradientTo: theme.colors.background,
+    color: (opacity = 1) => theme.colors.primary,
+    strokeWidth: 3,
+    barPercentage: 0.6,
+    useShadowColorFromDataset: false,
+    decimalPlaces: 0,
+    formatYLabel: (value: string) => `$${parseInt(value)}`,
+    propsForDots: {
+      r: '6',
+      strokeWidth: '2',
+      stroke: theme.colors.primary,
+    },
+    propsForBackgroundLines: {
+      stroke: theme.colors.border,
+      strokeDasharray: '4',
+    },
+    propsForLabels: {
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+  };
+
+  // Helper to check if there is any real data
+  const hasCategoryData = categorySpending.some(c => c.amount > 0);
+  const filteredMonthlySpending = monthlySpending.filter(m => m.amount > 0);
+  const hasMonthlyData = filteredMonthlySpending.length > 0;
+
+  // Only show the last 6 months with data for the monthly chart
+  const last6Months = filteredMonthlySpending.slice(-6);
+  const monthlyData = {
+    labels: last6Months.map(m => m.month),
+    datasets: [
+      {
+        data: last6Months.map(m => m.amount),
+        color: (opacity = 1) => theme.colors.primary, // Line color
+        strokeWidth: 3,
+      },
+    ],
+    legend: ['Spending'],
+  };
+
+  const categoryData = {
+    labels: categorySpending.filter(c => c.amount > 0).map(c => c.category),
+    datasets: [
+      {
+        data: categorySpending.filter(c => c.amount > 0).map(c => c.amount),
+        color: (opacity = 1) => theme.colors.secondary, // Bar color
+      },
+    ],
+    legend: ['Spending'],
+  };
+
+  // Dynamic chart titles
+  const chartTitle = () => {
+    switch (timeRange) {
+      case 'week':
+        return 'Weekly Spending';
+      case 'month':
+        return 'Monthly Spending';
+      case 'year':
+        return 'Yearly Spending';
+      default:
+        return 'Spending';
+    }
+  };
+
+  // Chart width for scrollable charts
+  const getChartWidth = (numPoints: number) => Math.max(screenWidth, numPoints * 60);
+
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-    >
-      <View style={[styles.header, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Spending Analytics
-        </Text>
-        <View style={styles.timeRangeContainer}>
-          {['week', 'month', 'year'].map((range) => (
-            <TouchableOpacity
-              key={range}
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.timeRangeContainer}>
+        {['week', 'month', 'year'].map((range) => (
+          <TouchableOpacity
+            key={range}
+            style={[
+              styles.timeRangeButton,
+              timeRange === range && { backgroundColor: theme.colors.primary },
+            ]}
+            onPress={() => setTimeRange(range as 'week' | 'month' | 'year')}
+          >
+            <Text
               style={[
-                styles.timeRangeButton,
-                {
-                  backgroundColor:
-                    timeRange === range ? theme.colors.primary : theme.colors.background,
-                },
+                styles.timeRangeText,
+                { color: timeRange === range ? '#fff' : theme.colors.text },
               ]}
-              onPress={() => setTimeRange(range)}
             >
-              <Text
-                style={[
-                  styles.timeRangeText,
-                  {
-                    color: timeRange === range ? 'white' : theme.colors.text,
-                  },
-                ]}
-              >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {range.charAt(0).toUpperCase() + range.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <View style={[styles.chartCard, { backgroundColor: theme.colors.card, overflow: 'hidden' }]}>
+      <View style={[styles.chartContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1, shadowColor: theme.colors.border, shadowOpacity: 0.15 }]}>
         <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-          Monthly Spending Trend
-        </Text>
-        <LineChart
-          data={{
-            labels: monthlySpending.map(item => item.month),
-            datasets: [{
-              data: monthlySpending.map(item => item.amount),
-            }],
-          }}
-          width={chartWidth}
-          height={220}
-          chartConfig={chartConfig}
-          bezier
-          style={styles.chart}
-        />
-      </View>
-
-      <View style={[styles.chartCard, { backgroundColor: theme.colors.card, overflow: 'hidden' }]}>
-        <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-          Spending by Category
+          {chartTitle()} by Category
         </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <BarChart
-            data={{
-              labels: categorySpending.map(item => item.category),
-              datasets: [{
-                data: categorySpending.map(item => item.amount),
-              }],
-            }}
-            width={Math.max(chartWidth, categorySpending.length * 80)}
-            height={260}
-            chartConfig={chartConfig}
-            style={styles.chart}
-            showValuesOnTopOfBars
-          />
+          {hasCategoryData ? (
+            <View style={{ position: 'relative' }}>
+              <BarChart
+                data={categoryData}
+                width={getChartWidth(categoryData.labels.length)}
+                height={220}
+                yAxisLabel=""
+                yAxisSuffix=""
+                yAxisInterval={1}
+                chartConfig={{
+                  ...chartConfig,
+                  backgroundGradientFrom: "#f7f7fa",
+                  backgroundGradientTo: "#f7f7fa",
+                  color: (opacity = 1) => "rgba(52, 120, 246, 1)",
+                  labelColor: (opacity = 1) => "#222",
+                  propsForBackgroundLines: {
+                    stroke: "#e3e3e3",
+                    strokeDasharray: "4",
+                  },
+                  propsForLabels: {
+                    fontSize: 13,
+                    fontWeight: "600",
+                  },
+                }}
+                fromZero
+                showBarTops={true}
+                showValuesOnTopOfBars={true}
+                withInnerLines={true}
+                style={{ minWidth: screenWidth, borderRadius: 16 }}
+              />
+            </View>
+          ) : (
+            <View style={{ width: screenWidth }}>
+              <Text style={{ textAlign: 'center', color: theme.colors.text + '80', marginTop: 40, marginBottom: 40 }}>
+                No category spending data to display.
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </View>
 
-      <View style={[styles.insightsCard, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.insightsTitle, { color: theme.colors.text }]}>
-          Spending Insights
+      <View style={[styles.chartContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1, shadowColor: theme.colors.border, shadowOpacity: 0.15 }]}>
+        <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
+          {chartTitle()}
         </Text>
-        {Object.entries(insights).map(([category, insight], index) => (
-          <View key={index} style={styles.insightItem}>
-            <Ionicons
-              name="information-circle-outline"
-              size={20}
-              color={theme.colors.primary}
-              style={styles.insightIcon}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {hasMonthlyData ? (
+            <LineChart
+              data={monthlyData}
+              width={getChartWidth(monthlyData.labels.length)}
+              height={220}
+              yAxisLabel="$"
+              yAxisSuffix=""
+              chartConfig={chartConfig}
+              bezier
+              style={{ minWidth: screenWidth, borderRadius: 16 }}
             />
-            <Text style={[styles.insightText, { color: theme.colors.text }]}>
-              {category}: {insight}
-            </Text>
-          </View>
-        ))}
+          ) : (
+            <View style={{ width: screenWidth }}>
+              <Text style={{ textAlign: 'center', color: theme.colors.text + '80', marginTop: 40, marginBottom: 40 }}>
+                No {chartTitle().toLowerCase()} data to display.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+
+      <View style={[styles.insightsContainer, { backgroundColor: theme.colors.card }]}>
+        <Text style={[styles.insightsTitle, { color: theme.colors.text }]}>Spending Insights</Text>
+        {Object.entries(insights).length > 0 ? (
+          Object.entries(insights).map(([category, insight]) => (
+            <View key={category} style={styles.insightItem}>
+              <Text style={[styles.insightCategory, { color: theme.colors.text }]}>{category}</Text>
+              <Text style={[styles.insightText, { color: theme.colors.text + '80' }]}>{insight}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={{ textAlign: 'center', color: theme.colors.text + '80', marginTop: 20 }}>
+            No insights to display yet.
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -204,40 +387,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  header: {
-    padding: 20,
-    marginBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
   timeRangeContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    padding: 20,
   },
   timeRangeButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 20,
   },
   timeRangeText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  chartCard: {
+  chartContainer: {
     margin: 20,
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 3,
+    backgroundColor: '#fff',
   },
   chartTitle: {
     fontSize: 18,
@@ -248,7 +421,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 16,
   },
-  insightsCard: {
+  insightsContainer: {
     margin: 20,
     padding: 20,
     borderRadius: 12,
@@ -264,16 +437,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   insightItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 15,
   },
-  insightIcon: {
-    marginRight: 10,
+  insightCategory: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 5,
   },
   insightText: {
-    fontSize: 16,
-    lineHeight: 24,
-    flex: 1,
+    fontSize: 14,
   },
-}); 
+});

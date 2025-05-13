@@ -3,86 +3,123 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
   TextInput,
-  Modal,
   Alert,
+  Modal,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
-// Mock data - replace with actual data from your backend
-const mockGroups = [
+interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  paidBy: string;
+  splitBetween: string[];
+  date: Date;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  members: string[];
+  expenses: Expense[];
+}
+
+// Mock data
+const mockGroups: Group[] = [
   {
-    id: 1,
-    name: 'Apartment',
-    members: ['John', 'Sarah', 'Mike'],
+    id: '1',
+    name: 'Roommates',
+    members: ['John', 'Alice', 'Bob'],
     expenses: [
-      { id: 1, name: 'Rent', amount: 1800, paidBy: 'John', split: [600, 600, 600] },
-      { id: 2, name: 'Utilities', amount: 300, paidBy: 'Sarah', split: [100, 100, 100] },
+      {
+        id: '1',
+        description: 'Rent',
+        amount: 1500,
+        paidBy: 'John',
+        splitBetween: ['John', 'Alice', 'Bob'],
+        date: new Date('2024-03-01'),
+      },
+      {
+        id: '2',
+        description: 'Utilities',
+        amount: 200,
+        paidBy: 'Alice',
+        splitBetween: ['John', 'Alice', 'Bob'],
+        date: new Date('2024-03-05'),
+      },
     ],
   },
   {
-    id: 2,
+    id: '2',
     name: 'Trip to NYC',
-    members: ['John', 'Sarah', 'Mike', 'Emma'],
+    members: ['John', 'Alice', 'Bob', 'Carol'],
     expenses: [
-      { id: 1, name: 'Hotel', amount: 800, paidBy: 'Mike', split: [200, 200, 200, 200] },
-      { id: 2, name: 'Dinner', amount: 200, paidBy: 'Emma', split: [50, 50, 50, 50] },
+      {
+        id: '3',
+        description: 'Hotel',
+        amount: 800,
+        paidBy: 'Bob',
+        splitBetween: ['John', 'Alice', 'Bob', 'Carol'],
+        date: new Date('2024-03-10'),
+      },
     ],
   },
 ];
 
 export default function Shared() {
   const { theme } = useTheme();
-  const [groups, setGroups] = useState(mockGroups);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newGroup, setNewGroup] = useState({
-    name: '',
-    members: '',
+  const [groups, setGroups] = useState<Group[]>(mockGroups);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [newExpense, setNewExpense] = useState({
+    description: '',
+    amount: '',
+    paidBy: '',
   });
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
 
-  const handleCreateGroup = () => {
-    if (!newGroup.name || !newGroup.members) {
+  const handleAddExpense = () => {
+    if (!selectedGroup) return;
+
+    if (!newExpense.description || !newExpense.amount || !newExpense.paidBy) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    const members = newGroup.members.split(',').map((m) => m.trim());
-    const group = {
-      id: groups.length + 1,
-      name: newGroup.name,
-      members,
-      expenses: [],
+    const expense: Expense = {
+      id: Date.now().toString(),
+      description: newExpense.description,
+      amount: parseFloat(newExpense.amount),
+      paidBy: newExpense.paidBy,
+      splitBetween: selectedGroup.members,
+      date: new Date(),
     };
 
-    setGroups([...groups, group]);
-    setNewGroup({ name: '', members: '' });
-    setModalVisible(false);
+    const updatedGroups = groups.map(group =>
+      group.id === selectedGroup.id
+        ? { ...group, expenses: [...group.expenses, expense] }
+        : group
+    );
+
+    setGroups(updatedGroups);
+    setShowAddExpenseModal(false);
+    setNewExpense({ description: '', amount: '', paidBy: '' });
   };
 
-  const handleAddExpense = (groupId: number) => {
-    setSelectedGroup(groupId);
-    // Add your expense addition logic here
-  };
-
-  const calculateBalances = (group: typeof mockGroups[0]) => {
+  const calculateBalances = (group: Group) => {
     const balances: { [key: string]: number } = {};
-    group.members.forEach((member) => {
+    group.members.forEach(member => {
       balances[member] = 0;
     });
 
-    group.expenses.forEach((expense) => {
-      const splitAmount = expense.amount / expense.split.length;
-      expense.split.forEach((amount, index) => {
-        const member = group.members[index];
-        if (expense.paidBy === member) {
-          balances[member] += expense.amount - amount;
-        } else {
-          balances[member] -= amount;
-        }
+    group.expenses.forEach(expense => {
+      const shareAmount = expense.amount / expense.splitBetween.length;
+      balances[expense.paidBy] += expense.amount;
+      expense.splitBetween.forEach(member => {
+        balances[member] -= shareAmount;
       });
     });
 
@@ -90,151 +127,149 @@ export default function Shared() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Shared Expenses
-        </Text>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="add" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      {groups.map((group) => (
-        <View
-          key={group.id}
-          style={[styles.groupCard, { backgroundColor: theme.colors.card }]}
-        >
-          <View style={styles.groupHeader}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView style={styles.groupsList}>
+        {groups.map(group => (
+          <TouchableOpacity
+            key={group.id}
+            style={[styles.groupCard, { backgroundColor: theme.colors.card }]}
+            onPress={() => setSelectedGroup(group)}
+          >
             <Text style={[styles.groupName, { color: theme.colors.text }]}>
               {group.name}
             </Text>
-            <TouchableOpacity
-              onPress={() => handleAddExpense(group.id)}
-              style={styles.addExpenseButton}
-            >
-              <Ionicons name="add-circle-outline" size={24} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.membersContainer}>
-            {group.members.map((member, index) => (
-              <View
-                key={index}
-                style={[styles.memberTag, { backgroundColor: theme.colors.background }]}
-              >
-                <Text style={[styles.memberName, { color: theme.colors.text }]}>
-                  {member}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.expensesList}>
-            {group.expenses.map((expense) => (
-              <View key={expense.id} style={styles.expenseItem}>
-                <View style={styles.expenseInfo}>
-                  <Text style={[styles.expenseName, { color: theme.colors.text }]}>
-                    {expense.name}
-                  </Text>
-                  <Text style={[styles.expensePaidBy, { color: theme.colors.text + '80' }]}>
-                    Paid by {expense.paidBy}
-                  </Text>
-                </View>
-                <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>
-                  ${expense.amount}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.balancesContainer}>
-            <Text style={[styles.balancesTitle, { color: theme.colors.text }]}>
-              Balances
+            <Text style={[styles.memberCount, { color: theme.colors.text + '80' }]}>
+              {group.members.length} members
             </Text>
-            {Object.entries(calculateBalances(group)).map(([member, balance]) => (
-              <View key={member} style={styles.balanceItem}>
-                <Text style={[styles.balanceName, { color: theme.colors.text }]}>
-                  {member}
-                </Text>
-                <Text
-                  style={[
-                    styles.balanceAmount,
-                    {
-                      color:
-                        balance > 0
-                          ? theme.colors.success
-                          : balance < 0
-                          ? theme.colors.error
-                          : theme.colors.text,
-                    },
-                  ]}
-                >
-                  {balance > 0 ? '+' : ''}${balance}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ))}
+            <Text style={[styles.expenseCount, { color: theme.colors.text + '80' }]}>
+              {group.expenses.length} expenses
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       <Modal
+        visible={showAddExpenseModal}
         animationType="slide"
         transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalContainer, { backgroundColor: theme.colors.background + '99' }]}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
             <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-              Create New Group
+              Add Expense
             </Text>
-
             <TextInput
               style={[styles.input, { 
                 backgroundColor: theme.colors.background,
                 color: theme.colors.text,
-                borderColor: theme.colors.border
+                borderColor: theme.colors.border,
               }]}
-              placeholder="Group Name"
+              placeholder="Description"
               placeholderTextColor={theme.colors.text + '80'}
-              value={newGroup.name}
-              onChangeText={(text) => setNewGroup({ ...newGroup, name: text })}
+              value={newExpense.description}
+              onChangeText={text => setNewExpense({ ...newExpense, description: text })}
             />
-
             <TextInput
               style={[styles.input, { 
                 backgroundColor: theme.colors.background,
                 color: theme.colors.text,
-                borderColor: theme.colors.border
+                borderColor: theme.colors.border,
               }]}
-              placeholder="Members (comma-separated)"
+              placeholder="Amount"
               placeholderTextColor={theme.colors.text + '80'}
-              value={newGroup.members}
-              onChangeText={(text) => setNewGroup({ ...newGroup, members: text })}
+              keyboardType="numeric"
+              value={newExpense.amount}
+              onChangeText={text => setNewExpense({ ...newExpense, amount: text })}
             />
-
+            <TextInput
+              style={[styles.input, { 
+                backgroundColor: theme.colors.background,
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+              }]}
+              placeholder="Paid by"
+              placeholderTextColor={theme.colors.text + '80'}
+              value={newExpense.paidBy}
+              onChangeText={text => setNewExpense({ ...newExpense, paidBy: text })}
+            />
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
-                onPress={() => setModalVisible(false)}
+                onPress={() => setShowAddExpenseModal(false)}
               >
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleCreateGroup}
+                onPress={handleAddExpense}
               >
-                <Text style={styles.modalButtonText}>Create Group</Text>
+                <Text style={styles.modalButtonText}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+
+      {selectedGroup && (
+        <View style={[styles.groupDetails, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.groupHeader}>
+            <Text style={[styles.groupTitle, { color: theme.colors.text }]}>
+              {selectedGroup.name}
+            </Text>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => setShowAddExpenseModal(true)}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.expensesList}>
+            {selectedGroup.expenses.map(expense => (
+              <View key={expense.id} style={styles.expenseItem}>
+                <View style={styles.expenseInfo}>
+                  <Text style={[styles.expenseDescription, { color: theme.colors.text }]}>
+                    {expense.description}
+                  </Text>
+                  <Text style={[styles.expenseDate, { color: theme.colors.text + '80' }]}>
+                    {expense.date.toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.expenseAmount}>
+                  <Text style={[styles.amount, { color: theme.colors.text }]}>
+                    ${expense.amount.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.paidBy, { color: theme.colors.text + '80' }]}>
+                    Paid by {expense.paidBy}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.balancesContainer}>
+            <Text style={[styles.balancesTitle, { color: theme.colors.text }]}>
+              Balances
+            </Text>
+            {Object.entries(calculateBalances(selectedGroup)).map(([member, balance]) => (
+              <View key={member} style={styles.balanceItem}>
+                <Text style={[styles.memberName, { color: theme.colors.text }]}>
+                  {member}
+                </Text>
+                <Text
+                  style={[
+                    styles.balance,
+                    { color: balance > 0 ? theme.colors.success : theme.colors.error },
+                  ]}
+                >
+                  {balance > 0 ? '+' : ''}${balance.toFixed(2)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -242,29 +277,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  groupsList: {
+    flex: 1,
     padding: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   groupCard: {
-    margin: 20,
     padding: 20,
     borderRadius: 12,
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  groupName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  memberCount: {
+    fontSize: 14,
+  },
+  expenseCount: {
+    fontSize: 14,
+  },
+  groupDetails: {
+    flex: 1,
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -273,100 +317,103 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
-  groupName: {
-    fontSize: 20,
+  groupTitle: {
+    fontSize: 24,
     fontWeight: '600',
   },
-  addExpenseButton: {
-    padding: 5,
-  },
-  membersContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15,
-  },
-  memberTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  memberName: {
-    fontSize: 14,
-    fontWeight: '500',
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   expensesList: {
-    marginBottom: 15,
+    flex: 1,
   },
   expenseItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   expenseInfo: {
     flex: 1,
   },
-  expenseName: {
+  expenseDescription: {
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: 5,
   },
-  expensePaidBy: {
+  expenseDate: {
     fontSize: 14,
   },
   expenseAmount: {
+    alignItems: 'flex-end',
+  },
+  amount: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 5,
+  },
+  paidBy: {
+    fontSize: 14,
   },
   balancesContainer: {
-    marginTop: 15,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
   balancesTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   balanceItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  balanceName: {
-    fontSize: 14,
+  memberName: {
+    fontSize: 16,
   },
-  balanceAmount: {
-    fontSize: 14,
-    fontWeight: '600',
+  balance: {
+    fontSize: 16,
+    fontWeight: '500',
   },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
+    width: '80%',
     padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 20,
     textAlign: 'center',
   },
   input: {
     height: 50,
+    borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 15,
-    borderWidth: 1,
     fontSize: 16,
   },
   modalButtons: {
@@ -383,7 +430,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   modalButtonText: {
-    color: 'white',
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },

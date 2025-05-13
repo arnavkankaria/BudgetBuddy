@@ -10,22 +10,11 @@ import {
   Alert,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { firestoreService } from '../../src/services/firestore';
+import { Transaction } from '../../src/types/transaction';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-// Mock data - replace with actual data from your backend
-const mockExpenses = [
-  { id: 1, name: 'Grocery Shopping', amount: 150, category: 'Food', date: '2024-03-15' },
-  { id: 2, name: 'Movie Night', amount: 80, category: 'Entertainment', date: '2024-03-14' },
-  { id: 3, name: 'Uber Ride', amount: 25, category: 'Transport', date: '2024-03-13' },
-  { id: 4, name: 'Coffee Shop', amount: 15, category: 'Food', date: '2024-03-12' },
-  { id: 5, name: 'New Shoes', amount: 120, category: 'Shopping', date: '2024-03-11' },
-];
-
-const mockRecurring = [
-  { id: 1, name: 'Netflix', amount: 15, category: 'Entertainment', recurrence: 'monthly', nextDate: '2024-06-15' },
-  { id: 2, name: 'Gym Membership', amount: 40, category: 'Health', recurrence: 'monthly', nextDate: '2024-06-20' },
-];
 
 const categories = [
   'Food',
@@ -40,16 +29,17 @@ const categories = [
 
 export default function Expenses() {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [recurringModalVisible, setRecurringModalVisible] = useState(false);
-  const [expenses, setExpenses] = useState(mockExpenses);
-  const [recurringPayments, setRecurringPayments] = useState(mockRecurring);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [recurringPayments, setRecurringPayments] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<'expenses' | 'subscriptions'>('expenses');
   const [newExpense, setNewExpense] = useState({
     name: '',
     amount: '',
     category: categories[0],
-    date: new Date().toISOString().split('T')[0],
+    date: new Date(),
   });
   const [recurring, setRecurring] = useState({
     name: '',
@@ -60,29 +50,47 @@ export default function Expenses() {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const handleAddExpense = () => {
-    if (!newExpense.name || !newExpense.amount) {
+  useEffect(() => {
+    if (user) {
+      // Subscribe to real-time updates for transactions
+      const unsubscribe = firestoreService.subscribeToTransactions(user.uid, (updatedTransactions) => {
+        setTransactions(updatedTransactions);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [user]);
+
+  const handleAddExpense = async () => {
+    if (!user || !newExpense.name || !newExpense.amount) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    const expense = {
-      id: expenses.length + 1,
-      ...newExpense,
-      amount: parseFloat(newExpense.amount),
-    };
+    try {
+      await firestoreService.addTransaction(user.uid, {
+        amount: parseFloat(newExpense.amount),
+        category: newExpense.category,
+        date: newExpense.date,
+        description: newExpense.name,
+        type: 'expense',
+      });
 
-    setExpenses([expense, ...expenses]);
-    setNewExpense({
-      name: '',
-      amount: '',
-      category: categories[0],
-      date: new Date().toISOString().split('T')[0],
-    });
-    setModalVisible(false);
+      setNewExpense({
+        name: '',
+        amount: '',
+        category: categories[0],
+        date: new Date(),
+      });
+      setModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add expense');
+    }
   };
 
-  const handleDeleteExpense = (id: number) => {
+  const handleDeleteExpense = async (id: string) => {
+    if (!user) return;
+
     Alert.alert(
       'Delete Expense',
       'Are you sure you want to delete this expense?',
@@ -91,41 +99,61 @@ export default function Expenses() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setExpenses(expenses.filter((expense) => expense.id !== id));
+          onPress: async () => {
+            try {
+              await firestoreService.deleteTransaction(user.uid, id);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete expense');
+            }
           },
         },
       ]
     );
   };
 
-  const handleAddRecurring = () => {
-    setRecurringPayments([
-      {
-        id: recurringPayments.length + 1,
-        name: recurring.name,
+  const handleAddRecurring = async () => {
+    if (!user || !recurring.name || !recurring.amount) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await firestoreService.addTransaction(user.uid, {
         amount: parseFloat(recurring.amount),
         category: recurring.category,
-        recurrence: recurring.recurrence,
-        nextDate:
-          recurring.recurrence === 'custom'
-            ? recurring.customDate.toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0],
-      },
-      ...recurringPayments,
-    ]);
-    setRecurring({
-      name: '',
-      amount: '',
-      category: categories[0],
-      recurrence: 'weekly',
-      customDate: new Date(),
-    });
-    setRecurringModalVisible(false);
+        date: recurring.customDate,
+        description: recurring.name,
+        type: 'expense',
+      });
+
+      setRecurring({
+        name: '',
+        amount: '',
+        category: categories[0],
+        recurrence: 'weekly',
+        customDate: new Date(),
+      });
+      setRecurringModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add recurring payment');
+    }
   };
 
-  const handleDeleteRecurring = (id: number) => {
-    setRecurringPayments(recurringPayments.filter((rec) => rec.id !== id));
+  const handleDeleteRecurring = (id: string) => {
+    Alert.alert(
+      'Delete Recurring Payment',
+      'Are you sure you want to delete this recurring payment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setRecurringPayments(recurringPayments.filter((rec) => rec.id !== id));
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -148,25 +176,25 @@ export default function Expenses() {
       {/* Tab Content */}
       {activeTab === 'expenses' ? (
         <ScrollView style={styles.expensesList}>
-          {expenses.map((expense) => (
+          {transactions.map((transaction) => (
             <View
-              key={expense.id}
+              key={transaction.id}
               style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}
             >
               <View style={styles.expenseInfo}>
                 <Text style={[styles.expenseName, { color: theme.colors.text }]}>
-                  {expense.name}
+                  {transaction.description}
                 </Text>
                 <Text style={[styles.expenseCategory, { color: theme.colors.text + '80' }]}>
-                  {expense.category} • {expense.date}
+                  {transaction.category} • {transaction.date.toDate().toLocaleDateString()}
                 </Text>
               </View>
               <View style={styles.expenseActions}>
                 <Text style={[styles.expenseAmount, { color: theme.colors.error }]}>
-                  -${expense.amount}
+                  -${transaction.amount}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => handleDeleteExpense(expense.id)}
+                  onPress={() => handleDeleteExpense(transaction.id)}
                   style={styles.deleteButton}
                 >
                   <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
@@ -180,8 +208,8 @@ export default function Expenses() {
           {recurringPayments.map((rec) => (
             <View key={rec.id} style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}> 
               <View style={styles.expenseInfo}>
-                <Text style={[styles.expenseName, { color: theme.colors.text }]}> {rec.name} </Text>
-                <Text style={[styles.expenseCategory, { color: theme.colors.text + '80' }]}> {rec.category} • {rec.recurrence?.charAt(0).toUpperCase() + rec.recurrence?.slice(1)} • Next: {rec.nextDate} </Text>
+                <Text style={[styles.expenseName, { color: theme.colors.text }]}> {rec.description} </Text>
+                <Text style={[styles.expenseCategory, { color: theme.colors.text + '80' }]}> {rec.category} • {rec.recurrence?.charAt(0).toUpperCase() + rec.recurrence?.slice(1)} • Next: {rec.date.toDate().toLocaleDateString()} </Text>
               </View>
               <View style={styles.expenseActions}>
                 <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}> -${rec.amount} </Text>

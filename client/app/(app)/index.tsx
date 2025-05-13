@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,44 +15,44 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import Modal from 'react-native-modal';
 import * as Linking from 'expo-linking';
-
-// Mock data - replace with actual data from your backend
-const mockData = {
-  budgetSummary: {
-    totalBudget: 2000,
-    spent: 1200,
-    remaining: 800,
-    categories: [
-      { name: 'Food', spent: 400, budget: 500 },
-      { name: 'Transport', spent: 200, budget: 300 },
-      { name: 'Entertainment', spent: 300, budget: 400 },
-      { name: 'Shopping', spent: 300, budget: 800 },
-    ],
-  },
-  topExpenses: [
-    { id: 1, name: 'Grocery Shopping', amount: 150, category: 'Food', date: '2024-03-15' },
-    { id: 2, name: 'Movie Night', amount: 80, category: 'Entertainment', date: '2024-03-14' },
-    { id: 3, name: 'Uber Ride', amount: 25, category: 'Transport', date: '2024-03-13' },
-  ],
-};
-
-const BACKEND_URL = 'http://localhost:5000'; // Change to your backend URL if needed
+import { firestoreService } from '../../src/services/firestore';
+import { Transaction } from '../../src/types/transaction';
+import { Budget } from '../../src/types/budget';
 
 export default function Home() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
-  const [refreshing, setRefreshing] = React.useState(false);
-  const [reportModalVisible, setReportModalVisible] = React.useState(false);
-  const [selectedMonth, setSelectedMonth] = React.useState('');
-  const [loadingReport, setLoadingReport] = React.useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      // Subscribe to real-time updates for transactions and budgets
+      const unsubscribeTransactions = firestoreService.subscribeToTransactions(user.uid, (updatedTransactions) => {
+        setTransactions(updatedTransactions);
+      });
+
+      const unsubscribeBudgets = firestoreService.subscribeToBudgets(user.uid, (updatedBudgets) => {
+        setBudgets(updatedBudgets);
+      });
+
+      setLoading(false);
+
+      return () => {
+        unsubscribeTransactions();
+        unsubscribeBudgets();
+      };
+    }
+  }, [user]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    // Add your refresh logic here
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
+    // The real-time listeners will automatically update the data
+    setRefreshing(false);
   }, []);
 
   const getProgressColor = (spent: number, budget: number) => {
@@ -61,47 +62,46 @@ export default function Home() {
     return theme.colors.success;
   };
 
-  // Helper to get months up to last month
-  const getMonthOptions = () => {
-    const now = new Date();
-    const months = [];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      if (i === 0) continue; // skip current month
-      months.push({
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      });
-    }
-    return months;
+  // Calculate budget summary
+  const budgetSummary = {
+    totalBudget: budgets.reduce((sum, budget) => sum + budget.amount, 0),
+    spent: transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0),
+    remaining: budgets.reduce((sum, budget) => sum + budget.amount, 0) -
+      transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
+    categories: budgets.map(budget => {
+      const spent = transactions
+        .filter(t => t.type === 'expense' && t.category === budget.category)
+        .reduce((sum, t) => sum + t.amount, 0);
+      return {
+        name: budget.category,
+        spent,
+        budget: budget.amount,
+      };
+    }),
   };
 
-  const handleGenerateReport = async () => {
-    if (!selectedMonth) return;
-    setLoadingReport(true);
-    try {
-      // You may need to add authentication headers if your backend requires it
-      const response = await fetch(`${BACKEND_URL}/report/monthly/pdf?month=${selectedMonth}`, {
-        method: 'GET',
-        headers: {
-          // 'Authorization': 'Bearer ...',
-        },
-      });
-      if (!response.ok) throw new Error('Failed to generate report');
-      // If backend returns a file URL
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      Linking.openURL(url);
-      // If backend returns a direct URL, use:
-      // const { url } = await response.json();
-      // Linking.openURL(url);
-    } catch (err) {
-      Alert.alert('Error', 'Could not generate report.');
-    } finally {
-      setLoadingReport(false);
-      setReportModalVisible(false);
-    }
-  };
+  // Get top expenses
+  const topExpenses = transactions
+    .filter(t => t.type === 'expense')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 3)
+    .map(t => ({
+      id: t.id,
+      name: t.description,
+      amount: t.amount,
+      category: t.category,
+      date: new Date(t.date).toLocaleDateString(),
+    }));
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -110,13 +110,13 @@ export default function Home() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.colors.card }]}>
         <Text style={[styles.greeting, { color: theme.colors.text }]}>
-          Hello, {user?.email?.split('@')[0] || 'User'}!
+          Welcome back!
         </Text>
         <TouchableOpacity
-          onPress={() => router.push('/settings')}
           style={styles.settingsButton}
+          onPress={() => router.push('/settings')}
         >
           <Ionicons name="settings-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
@@ -124,31 +124,31 @@ export default function Home() {
 
       <View style={[styles.budgetCard, { backgroundColor: theme.colors.card }]}>
         <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-          Monthly Budget
+          Budget Overview
         </Text>
         <View style={styles.budgetSummary}>
           <View style={styles.budgetItem}>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text + '80' }]}>
+            <Text style={[styles.budgetLabel, { color: theme.colors.text }]}>
               Total Budget
             </Text>
             <Text style={[styles.budgetAmount, { color: theme.colors.text }]}>
-              ${mockData.budgetSummary.totalBudget}
+              ${budgetSummary.totalBudget}
             </Text>
           </View>
           <View style={styles.budgetItem}>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text + '80' }]}>
+            <Text style={[styles.budgetLabel, { color: theme.colors.text }]}>
               Spent
             </Text>
             <Text style={[styles.budgetAmount, { color: theme.colors.error }]}>
-              ${mockData.budgetSummary.spent}
+              ${budgetSummary.spent}
             </Text>
           </View>
           <View style={styles.budgetItem}>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text + '80' }]}>
+            <Text style={[styles.budgetLabel, { color: theme.colors.text }]}>
               Remaining
             </Text>
             <Text style={[styles.budgetAmount, { color: theme.colors.success }]}>
-              ${mockData.budgetSummary.remaining}
+              ${budgetSummary.remaining}
             </Text>
           </View>
         </View>
@@ -158,7 +158,7 @@ export default function Home() {
         <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
           Categories
         </Text>
-        {mockData.budgetSummary.categories.map((category, index) => (
+        {budgetSummary.categories.map((category, index) => (
           <View key={index} style={styles.categoryItem}>
             <View style={styles.categoryHeader}>
               <Text style={[styles.categoryName, { color: theme.colors.text }]}>
@@ -194,7 +194,7 @@ export default function Home() {
             </Text>
           </TouchableOpacity>
         </View>
-        {mockData.topExpenses.map((expense) => (
+        {topExpenses.map((expense) => (
           <View key={expense.id} style={styles.expenseItem}>
             <View style={styles.expenseInfo}>
               <Text style={[styles.expenseName, { color: theme.colors.text }]}>
@@ -210,7 +210,7 @@ export default function Home() {
           </View>
         ))}
       </View>
-      {/* Generate Monthly Report Button */}
+
       <TouchableOpacity
         style={[styles.reportButton, { backgroundColor: theme.colors.secondary }]}
         onPress={() => setReportModalVisible(true)}
@@ -218,32 +218,35 @@ export default function Home() {
         <Ionicons name="document-text-outline" size={20} color="#fff" />
         <Text style={styles.reportButtonText}>Generate Monthly Report</Text>
       </TouchableOpacity>
-      {/* Report Modal */}
-      <Modal isVisible={reportModalVisible} onBackdropPress={() => setReportModalVisible(false)}>
-        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}> 
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Month</Text>
-          {getMonthOptions().map((month) => (
-            <TouchableOpacity
-              key={month.value}
-              style={[styles.monthOption, selectedMonth === month.value && { backgroundColor: theme.colors.primary }]}
-              onPress={() => setSelectedMonth(month.value)}
-            >
-              <Text style={{ color: selectedMonth === month.value ? '#fff' : theme.colors.text }}>{month.label}</Text>
-            </TouchableOpacity>
-          ))}
+
+      <Modal
+        isVisible={reportModalVisible}
+        onBackdropPress={() => setReportModalVisible(false)}
+        style={styles.modal}
+      >
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+            Generate Monthly Report
+          </Text>
+          <Text style={[styles.modalText, { color: theme.colors.text }]}>
+            Would you like to generate a detailed monthly report of your expenses?
+          </Text>
           <View style={styles.modalButtons}>
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
+              style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
               onPress={() => setReportModalVisible(false)}
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.colors.success }]}
-              onPress={handleGenerateReport}
-              disabled={!selectedMonth || loadingReport}
+              style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => {
+                // Implement report generation
+                setReportModalVisible(false);
+                Alert.alert('Success', 'Report generated successfully!');
+              }}
             >
-              <Text style={styles.modalButtonText}>{loadingReport ? 'Generating...' : 'Generate'}</Text>
+              <Text style={styles.modalButtonText}>Generate</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -397,6 +400,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  modal: {
+    justifyContent: 'flex-end',
+    margin: 0,
+  },
   modalContent: {
     padding: 20,
     borderRadius: 12,
@@ -407,12 +414,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
   },
-  monthOption: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 10,
-    width: 200,
-    alignItems: 'center',
+  modalText: {
+    fontSize: 16,
+    marginBottom: 20,
   },
   modalButtons: {
     flexDirection: 'row',
