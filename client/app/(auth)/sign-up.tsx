@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
@@ -19,20 +20,39 @@ export default function SignUp() {
   const { signUp, loading, error } = useAuth();
   const router = useRouter();
   const { theme } = useTheme();
+  const [errorMessage, setErrorMessage] = useState('');
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(3000),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setErrorMessage(''));
+  };
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showError('Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showError('Passwords do not match');
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
+      showError('Password must be at least 8 characters long');
       return;
     }
 
@@ -40,25 +60,25 @@ export default function SignUp() {
       await signUp(email, password);
       router.replace('/(app)');
     } catch (error: any) {
-      let errorMessage = 'Failed to create account';
+      let message = 'Failed to create account';
       
       // Handle specific Firebase error codes
       switch (error.code) {
         case 'auth/email-already-in-use':
-          errorMessage = 'This email is already registered';
+          message = 'This email is already registered';
           break;
         case 'auth/invalid-email':
-          errorMessage = 'Please enter a valid email address';
+          message = 'Please enter a valid email address';
           break;
         case 'auth/weak-password':
-          errorMessage = 'Password is too weak';
+          message = 'Password is too weak';
           break;
         case 'auth/network-request-failed':
-          errorMessage = 'Network error. Please check your connection';
+          message = 'Network error. Please check your connection';
           break;
       }
       
-      Alert.alert('Error', errorMessage);
+      showError(message);
     }
   };
 
@@ -111,11 +131,28 @@ export default function SignUp() {
         />
       </View>
 
-      {error && (
-        <Text style={[styles.errorText, { color: theme.colors.error }]}>
-          {error}
-        </Text>
-      )}
+      {errorMessage ? (
+        <Animated.View 
+          style={[
+            styles.errorContainer,
+            { 
+              backgroundColor: theme.colors.error + '20',
+              opacity: fadeAnim,
+              transform: [{
+                translateY: fadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <Ionicons name="alert-circle" size={20} color={theme.colors.error} />
+          <Text style={[styles.errorText, { color: theme.colors.error }]}>
+            {errorMessage}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       <TouchableOpacity
         style={[
@@ -190,9 +227,16 @@ const styles = StyleSheet.create({
   signInText: {
     fontSize: 16,
   },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    gap: 8,
+  },
   errorText: {
     fontSize: 14,
-    marginBottom: 15,
-    textAlign: 'center',
+    flex: 1,
   },
 }); 
