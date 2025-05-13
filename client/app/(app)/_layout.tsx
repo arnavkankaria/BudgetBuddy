@@ -1,9 +1,23 @@
 import { Tabs } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { TouchableOpacity } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'expo-router';
 
 export default function AppLayout() {
   const { theme } = useTheme();
+  const { signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/sign-in');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   return (
     <Tabs
@@ -18,6 +32,14 @@ export default function AppLayout() {
           backgroundColor: theme.colors.card,
         },
         headerTintColor: theme.colors.text,
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={handleSignOut}
+            style={{ marginRight: 15 }}
+          >
+            <Ionicons name="log-out-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        ),
       }}
     >
       <Tabs.Screen
