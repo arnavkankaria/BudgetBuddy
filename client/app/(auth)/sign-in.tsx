@@ -11,12 +11,11 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { signIn, loading, error } = useAuth();
   const router = useRouter();
   const { theme } = useTheme();
 
@@ -30,25 +29,28 @@ export default function SignIn() {
       await signIn(email, password);
       router.replace('/(app)');
     } catch (error: any) {
-      Alert.alert('Error', 'Invalid email or password');
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      await signInWithGoogle();
-      router.replace('/(app)');
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to sign in with Google');
-    }
-  };
-
-  const handleAppleSignIn = async () => {
-    try {
-      await signInWithApple();
-      router.replace('/(app)');
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to sign in with Apple');
+      let errorMessage = 'Invalid email or password';
+      
+      // Handle specific Firebase error codes
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Please enter a valid email address';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection';
+          break;
+      }
+      
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -69,6 +71,7 @@ export default function SignIn() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          editable={!loading}
         />
         
         <TextInput
@@ -82,11 +85,24 @@ export default function SignIn() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
       </View>
 
+      {error && (
+        <Text style={[styles.errorText, { color: theme.colors.error }]}>
+          {error}
+        </Text>
+      )}
+
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: theme.colors.primary }]}
+        style={[
+          styles.button, 
+          { 
+            backgroundColor: theme.colors.primary,
+            opacity: loading ? 0.7 : 1
+          }
+        ]}
         onPress={handleSignIn}
         disabled={loading}
       >
@@ -97,37 +113,10 @@ export default function SignIn() {
         )}
       </TouchableOpacity>
 
-      <View style={styles.divider}>
-        <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
-        <Text style={[styles.dividerText, { color: theme.colors.text }]}>or</Text>
-        <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
-      </View>
-
-      <TouchableOpacity
-        style={[styles.socialButton, { backgroundColor: theme.colors.card }]}
-        onPress={handleGoogleSignIn}
-        disabled={loading}
-      >
-        <Ionicons name="logo-google" size={24} color={theme.colors.text} />
-        <Text style={[styles.socialButtonText, { color: theme.colors.text }]}>
-          Continue with Google
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.socialButton, { backgroundColor: theme.colors.card }]}
-        onPress={handleAppleSignIn}
-        disabled={loading}
-      >
-        <Ionicons name="logo-apple" size={24} color={theme.colors.text} />
-        <Text style={[styles.socialButtonText, { color: theme.colors.text }]}>
-          Continue with Apple
-        </Text>
-      </TouchableOpacity>
-
       <TouchableOpacity
         onPress={() => router.push('/sign-up')}
         style={styles.signUpLink}
+        disabled={loading}
       >
         <Text style={[styles.signUpText, { color: theme.colors.primary }]}>
           Don't have an account? Sign Up
@@ -172,39 +161,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    fontSize: 16,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  socialButtonText: {
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: '500',
-  },
   signUpLink: {
     marginTop: 20,
     alignItems: 'center',
   },
   signUpText: {
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    marginBottom: 15,
+    textAlign: 'center',
   },
 }); 

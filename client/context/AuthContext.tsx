@@ -1,27 +1,45 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User
+} from 'firebase/auth';
+import { auth } from '../config/firebase/config';
 
 interface AuthContextType {
-  user: any;
+  user: User | null;
   loading: boolean;
+  error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      // Mock successful authentication
-      setUser({ email, uid: '123', displayName: email.split('@')[0] });
-    } catch (error) {
+      setError(null);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      setError(error.message);
       throw error;
     } finally {
       setLoading(false);
@@ -31,9 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string) => {
     try {
       setLoading(true);
-      // Mock successful registration
-      setUser({ email, uid: '123', displayName: email.split('@')[0] });
-    } catch (error) {
+      setError(null);
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      setError(error.message);
       throw error;
     } finally {
       setLoading(false);
@@ -43,41 +62,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
-      // Mock sign out
-      setUser(null);
-    } catch (error) {
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithGoogle = async () => {
-    try {
-      setLoading(true);
-      // Mock Google sign in
-      setUser({ 
-        email: 'user@gmail.com', 
-        uid: '123', 
-        displayName: 'Google User' 
-      });
-    } catch (error) {
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithApple = async () => {
-    try {
-      setLoading(true);
-      // Mock Apple sign in
-      setUser({ 
-        email: 'user@icloud.com', 
-        uid: '123', 
-        displayName: 'Apple User' 
-      });
-    } catch (error) {
+      setError(null);
+      await firebaseSignOut(auth);
+    } catch (error: any) {
+      setError(error.message);
       throw error;
     } finally {
       setLoading(false);
@@ -87,11 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     user,
     loading,
+    error,
     signIn,
     signUp,
     signOut,
-    signInWithGoogle,
-    signInWithApple,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

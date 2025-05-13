@@ -16,7 +16,7 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const { signUp, loading } = useAuth();
+  const { signUp, loading, error } = useAuth();
   const router = useRouter();
   const { theme } = useTheme();
 
@@ -40,7 +40,25 @@ export default function SignUp() {
       await signUp(email, password);
       router.replace('/(app)');
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to create account');
+      let errorMessage = 'Failed to create account';
+      
+      // Handle specific Firebase error codes
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'This email is already registered';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Please enter a valid email address';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password is too weak';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection';
+          break;
+      }
+      
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -61,6 +79,7 @@ export default function SignUp() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          editable={!loading}
         />
         
         <TextInput
@@ -74,6 +93,7 @@ export default function SignUp() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
 
         <TextInput
@@ -87,11 +107,24 @@ export default function SignUp() {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
+          editable={!loading}
         />
       </View>
 
+      {error && (
+        <Text style={[styles.errorText, { color: theme.colors.error }]}>
+          {error}
+        </Text>
+      )}
+
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: theme.colors.primary }]}
+        style={[
+          styles.button, 
+          { 
+            backgroundColor: theme.colors.primary,
+            opacity: loading ? 0.7 : 1
+          }
+        ]}
         onPress={handleSignUp}
         disabled={loading}
       >
@@ -105,6 +138,7 @@ export default function SignUp() {
       <TouchableOpacity
         onPress={() => router.push('/sign-in')}
         style={styles.signInLink}
+        disabled={loading}
       >
         <Text style={[styles.signInText, { color: theme.colors.primary }]}>
           Already have an account? Sign In
@@ -155,5 +189,10 @@ const styles = StyleSheet.create({
   },
   signInText: {
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    marginBottom: 15,
+    textAlign: 'center',
   },
 }); 

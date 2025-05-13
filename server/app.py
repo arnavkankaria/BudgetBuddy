@@ -1,11 +1,26 @@
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import credentials, firestore
+import sys
 
-# Initialize Firebase app
-cred = credentials.Certificate("firebase_config.json")  # your downloaded service account key
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+def verify_firebase_connection():
+    try:
+        # Initialize Firebase app
+        cred = credentials.Certificate("firebase_config.json")
+        firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        
+        # Test the connection by making a simple query
+        test_collection = db.collection('test_connection')
+        test_collection.limit(1).get()
+        print("✅ Successfully connected to Firebase!")
+        return db
+    except Exception as e:
+        print("❌ Failed to connect to Firebase:", str(e))
+        sys.exit(1)
+
+# Initialize Firebase and get db instance
+db = verify_firebase_connection()
 
 app = Flask(__name__)
 
@@ -26,7 +41,6 @@ def test_post():
         return jsonify({'message': 'added'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 # Add an expense
 @app.route('/expenses', methods=['POST'])
