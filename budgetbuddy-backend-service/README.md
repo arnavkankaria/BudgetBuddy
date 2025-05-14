@@ -99,10 +99,6 @@ pip install -r requirements.txt
    - Enable Authentication and Firestore
    - Download your service account key and save it as `firebase_key.json` in the project root
 
-5. Install wkhtmltopdf:
-   - macOS: `brew install wkhtmltopdf`
-   - Ubuntu: `sudo apt-get install wkhtmltopdf`
-   - Windows: Download from [wkhtmltopdf website](https://wkhtmltopdf.org/downloads.html)
 
 ### Configuration
 
@@ -142,7 +138,7 @@ python -m unittest discover -s tests
 ```bash
 coverage run --source=services -m unittest discover -s tests
 coverage report
-coverage html  # Generates HTML coverage report
+coverage html  
 ```
 
 3. Run specific test categories:
