@@ -83,7 +83,20 @@ class ExpenseService:
         result = [{"id": doc.id, **doc.to_dict()} for doc in expenses]
         return jsonify(result), 200
 
+    @classmethod
+    def get_expense(cls, expense_id, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
 
+        doc_ref = cls.firebase.db.collection("expenses").document(expense_id)
+        doc = doc_ref.get()
+        if not doc.exists or doc.to_dict().get("user_id") != uid:
+            return jsonify({"error": "Not found or unauthorized"}), 404
+
+        expense = doc.to_dict()
+        expense["id"] = doc.id
+        return jsonify(expense), 200
 
     @classmethod
     def _check_and_notify(cls, uid, category):

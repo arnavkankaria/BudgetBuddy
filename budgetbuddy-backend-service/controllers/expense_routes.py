@@ -31,3 +31,8 @@ def filter_by_category():
     category = request.args.get("category")
     return ExpenseService.filter_by_category(token, category)
 
+@expense_bp.route("/<expense_id>", methods=["GET"])
+def get_expense(expense_id):
+    token = request.headers.get("Authorization")
+    return ExpenseService.get_expense(expense_id, token)
+
