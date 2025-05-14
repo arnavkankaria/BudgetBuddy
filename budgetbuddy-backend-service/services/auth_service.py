@@ -51,3 +51,53 @@ class AuthService:
             return jsonify({"message": "User account deleted"}), 200
         except Exception as e:
             return jsonify({"error": str(e)}), 400
+
+    @staticmethod
+    def handle_google_user(user_info):
+        try:
+            # Check if user exists in Firebase
+            try:
+                user = auth.get_user_by_email(user_info['email'])
+                # User exists, create custom token
+                custom_token = auth.create_custom_token(user.uid)
+                if isinstance(custom_token, bytes):
+                    custom_token = custom_token.decode('utf-8')
+                return jsonify({
+                    "message": "Login successful",
+                    "uid": user.uid,
+                    "token": custom_token
+                }), 200
+            except Exception as e:
+                if 'not found' in str(e).lower():
+                    # Create new user
+                    user_record = auth.create_user(
+                        email=user_info['email'],
+                        display_name=user_info['name'],
+                        photo_url=user_info['picture'],
+                        email_verified=True
+                    )
+                    
+                    # Store user in Firestore
+                    user_doc = {
+                        "uid": user_record.uid,
+                        "email": user_record.email,
+                        "display_name": user_record.display_name,
+                        "photo_url": user_record.photo_url,
+                        "google_id": user_info['google_id']
+                    }
+                    AuthService.firebase.db.collection("users").document(user_record.uid).set(user_doc)
+                    
+                    # Create custom token for new user
+                    custom_token = auth.create_custom_token(user_record.uid)
+                    if isinstance(custom_token, bytes):
+                        custom_token = custom_token.decode('utf-8')
+                    return jsonify({
+                        "message": "User registered",
+                        "uid": user_record.uid,
+                        "token": custom_token
+                    }), 201
+                else:
+                    return jsonify({"error": str(e)}), 500
+                
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500

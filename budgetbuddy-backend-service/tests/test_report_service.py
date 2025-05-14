@@ -4,6 +4,7 @@ from flask import Flask
 from services.report_service import ReportService
 import sys
 import os
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -15,6 +16,10 @@ class TestReportService(unittest.TestCase):
         self.token = "valid_token"
         self.user_id = "user123"
         self.month = "2025-05"
+        # Set a fixed date for testing
+        self.test_date = datetime(2025, 5, 10)  # A Saturday
+        self.this_week_start = datetime(2025, 5, 5)  # Monday
+        self.last_week_start = datetime(2025, 4, 28)  # Previous Monday
 
     @patch("services.report_service.ReportService.firebase")
     def test_generate_monthly_report_success(self, mock_firebase):
@@ -47,11 +52,18 @@ class TestReportService(unittest.TestCase):
             self.assertEqual(response.json["summary"], {})
 
     @patch("services.report_service.ReportService.firebase")
-    def test_generate_weekly_insights_success(self, mock_firebase):
+    @patch("services.report_service.datetime")
+    def test_generate_weekly_insights_success(self, mock_datetime, mock_firebase):
+        # Mock datetime operations
+        mock_datetime.today.return_value = self.test_date
+        mock_datetime.strptime = datetime.strptime
+        mock_datetime.timedelta = timedelta
+        mock_datetime.datetime = datetime
+
         mock_firebase.verify_user_token.return_value = self.user_id
         mock_firebase.db.collection.return_value.where.return_value.stream.return_value = [
-            MagicMock(to_dict=lambda: {"category": "Food", "date": "2025-04-30", "amount": 100.0}),
-            MagicMock(to_dict=lambda: {"category": "Food", "date": "2025-05-01", "amount": 200.0})
+            MagicMock(to_dict=lambda: {"category": "Food", "date": "2025-05-03", "amount": 100.0}),
+            MagicMock(to_dict=lambda: {"category": "Food", "date": "2025-05-09", "amount": 200.0})
         ]
 
         with app.app_context():
@@ -59,6 +71,7 @@ class TestReportService(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn("insights", response.json)
             self.assertIn("Food", response.json["insights"])
+            self.assertIn("more", response.json["insights"]["Food"])
 
     @patch("services.report_service.ReportService.firebase")
     def test_generate_weekly_insights_unauthorized(self, mock_firebase):
@@ -69,7 +82,14 @@ class TestReportService(unittest.TestCase):
             self.assertIn("error", response.json)
 
     @patch("services.report_service.ReportService.firebase")
-    def test_generate_weekly_insights_new_spending(self, mock_firebase):
+    @patch("services.report_service.datetime")
+    def test_generate_weekly_insights_new_spending(self, mock_datetime, mock_firebase):
+        # Mock datetime operations
+        mock_datetime.today.return_value = self.test_date
+        mock_datetime.strptime = datetime.strptime
+        mock_datetime.timedelta = timedelta
+        mock_datetime.datetime = datetime
+
         mock_firebase.verify_user_token.return_value = self.user_id
         mock_firebase.db.collection.return_value.where.return_value.stream.return_value = [
             MagicMock(to_dict=lambda: {"category": "NewCat", "date": "2025-05-09", "amount": 200.0})
@@ -81,15 +101,25 @@ class TestReportService(unittest.TestCase):
             self.assertIn("NewCat", response.json["insights"])
             self.assertEqual(response.json["insights"]["NewCat"], "New spending")
 
-
     @patch("services.report_service.ReportService.firebase")
-    def test_generate_weekly_insights_empty(self, mock_firebase):
+    @patch("services.report_service.datetime")
+    def test_generate_weekly_insights_no_spending(self, mock_datetime, mock_firebase):
+        # Mock datetime operations
+        mock_datetime.today.return_value = self.test_date
+        mock_datetime.strptime = datetime.strptime
+        mock_datetime.timedelta = timedelta
+        mock_datetime.datetime = datetime
+
         mock_firebase.verify_user_token.return_value = self.user_id
-        mock_firebase.db.collection.return_value.where.return_value.stream.return_value = []
+        mock_firebase.db.collection.return_value.where.return_value.stream.return_value = [
+            MagicMock(to_dict=lambda: {"category": "OldCat", "date": "2025-05-02", "amount": 100.0})
+        ]
+
         with app.app_context():
             response, status = ReportService.generate_weekly_insights(self.token)
             self.assertEqual(status, 200)
-            self.assertEqual(response.json, {"insights": {}})
+            self.assertIn("OldCat", response.json["insights"])
+            self.assertEqual(response.json["insights"]["OldCat"], "No spending this week")
 
     @patch("services.report_service.ReportService.firebase")
     @patch("services.report_service.pdfkit.from_string", return_value=b"PDF")

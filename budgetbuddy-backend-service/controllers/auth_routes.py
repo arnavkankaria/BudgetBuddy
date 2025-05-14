@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from services.auth_service import AuthService
+from services.google_auth_service import GoogleAuthService
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -17,3 +18,11 @@ def login():
 def delete_account():
     token = request.headers.get("Authorization")
     return AuthService.delete_user(token)
+
+@auth_bp.route("/google", methods=["POST"])
+def google_auth():
+    data = request.get_json()
+    if not data or 'token' not in data:
+        return jsonify({"error": "Missing Google token"}), 400
+    
+    return GoogleAuthService.verify_google_token(data['token'])

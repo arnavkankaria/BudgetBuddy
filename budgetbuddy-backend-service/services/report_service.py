@@ -59,15 +59,23 @@ class ReportService:
                 last_week[e["category"]] += amount
 
         insights = {}
-        for category in set(this_week) | set(last_week):
-            current = this_week.get(category, 0)
-            previous = last_week.get(category, 0)
-            if previous == 0:
-                change = "New spending"
+        # Handle categories in this week
+        for category in this_week:
+            if category not in last_week:
+                insights[category] = "New spending"
             else:
-                percent = ((current - previous) / previous) * 100
-                change = f"{percent:.1f}% {'more' if percent > 0 else 'less'}"
-            insights[category] = change
+                current = this_week[category]
+                previous = last_week[category]
+                if previous == 0:
+                    insights[category] = "New spending"
+                else:
+                    percent = ((current - previous) / previous) * 100
+                    insights[category] = f"{percent:.1f}% {'more' if percent > 0 else 'less'}"
+
+        # Handle categories only in last week
+        for category in last_week:
+            if category not in this_week:
+                insights[category] = "No spending this week"
 
         return jsonify({"insights": insights}), 200
 
