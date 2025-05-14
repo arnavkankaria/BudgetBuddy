@@ -7,4 +7,7 @@ export interface Transaction {
   type: 'income' | 'expense';
   createdAt?: Date;
   updatedAt?: Date;
+  isRecurring?: boolean;
+  recurrence?: 'weekly' | 'monthly' | 'yearly';
+  nextPaymentDate?: Date;
 } 

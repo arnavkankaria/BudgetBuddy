@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot, serverTimestamp, where } from 'firebase/firestore';
 import { Transaction } from '../types/transaction';
 import { Budget } from '../types/budget';
 
@@ -141,6 +141,42 @@ class FirestoreService {
     await deleteDoc(docRef);
   }
 
+  // Recurring Transaction Operations
+  async addRecurringTransaction(userId: string, transaction: Omit<Transaction, 'id'>): Promise<string> {
+    console.log('Adding recurring transaction to Firestore:', { userId, transaction });
+    const docRef = await addDoc(collection(db, 'users', userId, 'transactions'), {
+      ...transaction,
+      isRecurring: true,
+      createdAt: serverTimestamp(),
+    });
+    console.log('Added recurring transaction with ID:', docRef.id);
+    return docRef.id;
+  }
+
+  async getRecurringTransactions(userId: string): Promise<Transaction[]> {
+    console.log('Getting recurring transactions for user:', userId);
+    const q = query(
+      collection(db, 'users', userId, 'transactions'),
+      where('isRecurring', '==', true),
+      orderBy('nextPaymentDate', 'asc')
+    );
+    const snapshot = await getDocs(q);
+    const transactions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    } as Transaction));
+    console.log('Retrieved recurring transactions:', transactions);
+    return transactions;
+  }
+
+  async updateRecurringTransaction(userId: string, transactionId: string, data: Partial<Transaction>): Promise<void> {
+    const docRef = doc(db, 'users', userId, 'transactions', transactionId);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
   // Real-time listeners
   subscribeToTransactions(userId: string, callback: (transactions: Transaction[]) => void) {
     const q = query(
@@ -188,6 +224,45 @@ class FirestoreService {
       );
       callback(groups);
     });
+  }
+
+  subscribeToRecurringTransactions(userId: string, callback: (transactions: Transaction[]) => void) {
+    console.log('Setting up recurring transactions subscription for user:', userId);
+    const q = query(
+      collection(db, 'users', userId, 'transactions'),
+      where('isRecurring', '==', true),
+      orderBy('nextPaymentDate', 'asc')
+    );
+    
+    return onSnapshot(q, 
+      (snapshot) => {
+        const transactions = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        } as Transaction));
+        console.log('Received recurring transactions update:', transactions);
+        callback(transactions);
+      },
+      (error) => {
+        console.error('Error in recurring transactions subscription:', error);
+        if (error.code === 'failed-precondition') {
+          // If the index is still building, try a simpler query without ordering
+          console.log('Index is building, falling back to simple query');
+          const simpleQuery = query(
+            collection(db, 'users', userId, 'transactions'),
+            where('isRecurring', '==', true)
+          );
+          return onSnapshot(simpleQuery, (snapshot) => {
+            const transactions = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+            } as Transaction));
+            console.log('Received recurring transactions update (simple query):', transactions);
+            callback(transactions);
+          });
+        }
+      }
+    );
   }
 }
 

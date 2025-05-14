@@ -58,3 +58,58 @@ class AIService:
             suggestions.append("You're on track! No overspending detected this month.")
 
         return jsonify({"suggestions": suggestions}), 200
+
+    @classmethod
+    def process_recurring_transactions(cls, token):
+        uid = cls.firebase.verify_user_token(token)
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # Get all recurring transactions
+        recurring_transactions = cls.firebase.db.collection("users").document(uid).collection("transactions").where("isRecurring", "==", True).stream()
+        
+        today = datetime.today()
+        processed_transactions = []
+
+        for doc in recurring_transactions:
+            transaction = doc.to_dict()
+            next_payment_date = transaction.get("nextPaymentDate")
+            
+            if not next_payment_date:
+                continue
+
+            # Convert Firestore timestamp to datetime
+            if hasattr(next_payment_date, 'toDate'):
+                next_payment_date = next_payment_date.toDate()
+            
+            # Check if payment is due
+            if next_payment_date <= today:
+                # Create new transaction
+                new_transaction = {
+                    "amount": transaction["amount"],
+                    "category": transaction["category"],
+                    "date": today,
+                    "description": transaction["description"],
+                    "type": "expense",
+                    "isRecurring": True,
+                    "recurrence": transaction["recurrence"]
+                }
+
+                # Calculate next payment date
+                if transaction["recurrence"] == "weekly":
+                    next_payment = today + timedelta(days=7)
+                elif transaction["recurrence"] == "monthly":
+                    next_payment = today + timedelta(days=30)
+                else:  # yearly
+                    next_payment = today + timedelta(days=365)
+
+                new_transaction["nextPaymentDate"] = next_payment
+
+                # Add new transaction
+                cls.firebase.db.collection("users").document(uid).collection("transactions").add(new_transaction)
+                processed_transactions.append(transaction["description"])
+
+        return jsonify({
+            "message": "Recurring transactions processed",
+            "processed": processed_transactions
+        })
