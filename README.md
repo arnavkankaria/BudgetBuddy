@@ -6,6 +6,53 @@ The primary goal of BudgetBuddy is to provide students with an AI-powered financ
 
 By digitizing financial tracking, BudgetBuddy eliminates the hassle of manual budget management, encourages smart financial decisions, and empowers students to take control of their money. The system integrates AI-driven spending insights, automated reminders for upcoming payments, and real-time deal recommendations to help students save more and spend wisely. With a user-friendly interface and student-centric features, BudgetBuddy serves as a practical financial tool that simplifies expense tracking, promotes financial literacy, and enhances money management for college students.
 
+## Features
+
+### Authentication & Security
+- **Firebase Authentication**: Secure user registration and login
+- **JWT Token Management**: Secure API access with token-based authentication
+- **Role-based Access Control**: Different permission levels for users
+- **Session Management**: Secure session handling and timeout
+
+### Expense Management
+- **Expense Tracking**: Record and categorize daily expenses
+- **Smart Categorization**: Automatic expense categorization using NLP
+- **Receipt Scanning**: Upload and process receipt images
+- **Multi-currency Support**: Handle expenses in different currencies
+- **Expense Search**: Advanced search and filtering capabilities
+
+### Budget Planning
+- **Monthly Budgets**: Create and manage monthly spending limits
+- **Category-wise Budgets**: Set budgets for different expense categories
+- **Budget Alerts**: Get notified when approaching budget limits
+- **Budget Analytics**: Track spending against budget goals
+- **Budget Templates**: Save and reuse budget templates
+
+### Reports & Analytics
+- **Custom Reports**: Generate detailed spending reports
+- **Visual Analytics**: Charts and graphs for spending patterns
+- **Export Options**: Export data in PDF, CSV, and Excel formats
+- **Trend Analysis**: Track spending trends over time
+- **Category Analysis**: Breakdown of spending by categories
+
+### Recurring Expenses
+- **Subscription Management**: Track recurring bills and subscriptions
+- **Payment Scheduling**: Set up automatic payment reminders
+- **Recurring Patterns**: Support for daily, weekly, monthly, and yearly patterns
+- **Subscription Analytics**: Track subscription costs and usage
+
+### Reminders & Notifications
+- **Payment Reminders**: Get notified about upcoming payments
+- **Budget Alerts**: Receive alerts for budget thresholds
+- **Custom Notifications**: Set up personalized notification preferences
+- **Email Notifications**: Receive important updates via email
+
+### Data Management
+- **Data Export**: Export financial data in multiple formats
+- **Data Import**: Import data from other financial applications
+- **Backup & Restore**: Automatic and manual backup options
+- **Data Migration**: Tools for migrating between different versions
+
 ## Getting Started
 
 ### Prerequisites
