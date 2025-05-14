@@ -92,7 +92,10 @@ export default function Home() {
       name: t.description,
       amount: t.amount,
       category: t.category,
-      date: new Date(t.date).toLocaleDateString(),
+      date:
+        t.date && typeof t.date.toDate === 'function'
+          ? t.date.toDate().toLocaleDateString()
+          : new Date(t.date).toLocaleDateString(),
     }));
 
   if (loading) {
