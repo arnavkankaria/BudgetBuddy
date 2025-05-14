@@ -31,6 +31,8 @@ export default function Budget() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<BudgetType | null>(null);
   const [budgets, setBudgets] = useState<BudgetType[]>([]);
   const [newBudget, setNewBudget] = useState({
     category: categories[0],
@@ -91,6 +93,39 @@ export default function Budget() {
     );
   };
 
+  const handleEditBudget = async () => {
+    if (!user || !editingBudget) return;
+
+    try {
+      await firestoreService.updateBudget(user.uid, editingBudget.id, {
+        category: newBudget.category,
+        amount: newBudget.amount,
+        period: newBudget.period,
+      });
+      setModalVisible(false);
+      setEditMode(false);
+      setEditingBudget(null);
+      setNewBudget({
+        category: categories[0],
+        amount: 500,
+        period: 'monthly',
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update budget');
+    }
+  };
+
+  const openEditModal = (budget: BudgetType) => {
+    setEditingBudget(budget);
+    setNewBudget({
+      category: budget.category,
+      amount: budget.amount,
+      period: budget.period,
+    });
+    setEditMode(true);
+    setModalVisible(true);
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.header}>
@@ -109,12 +144,20 @@ export default function Budget() {
             <Text style={[styles.budgetCategory, { color: theme.colors.text }]}>
               {budget.category}
             </Text>
-            <TouchableOpacity
-              onPress={() => handleDeleteBudget(budget.id)}
-              style={styles.deleteButton}
-            >
-              <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
-            </TouchableOpacity>
+            <View style={styles.budgetActions}>
+              <TouchableOpacity
+                onPress={() => openEditModal(budget)}
+                style={styles.editButton}
+              >
+                <Ionicons name="pencil-outline" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleDeleteBudget(budget.id)}
+                style={styles.deleteButton}
+              >
+                <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={[styles.budgetAmount, { color: theme.colors.text }]}>
             ${budget.amount}
@@ -129,11 +172,17 @@ export default function Budget() {
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          setModalVisible(false);
+          setEditMode(false);
+          setEditingBudget(null);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add New Budget</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+              {editMode ? 'Edit Budget' : 'Add New Budget'}
+            </Text>
             <Text style={[styles.label, { color: theme.colors.text }]}>Category</Text>
             <View style={[styles.pickerContainer, { backgroundColor: theme.colors.background }]}>
               {categories.map((category) => (
@@ -199,15 +248,19 @@ export default function Budget() {
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
-                onPress={() => setModalVisible(false)}
+                onPress={() => {
+                  setModalVisible(false);
+                  setEditMode(false);
+                  setEditingBudget(null);
+                }}
               >
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleAddBudget}
+                onPress={editMode ? handleEditBudget : handleAddBudget}
               >
-                <Text style={styles.modalButtonText}>Add</Text>
+                <Text style={styles.modalButtonText}>{editMode ? 'Update' : 'Add'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -257,6 +310,14 @@ const styles = StyleSheet.create({
   budgetCategory: {
     fontSize: 20,
     fontWeight: '600',
+  },
+  budgetActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editButton: {
+    padding: 5,
+    marginRight: 10,
   },
   deleteButton: {
     padding: 5,

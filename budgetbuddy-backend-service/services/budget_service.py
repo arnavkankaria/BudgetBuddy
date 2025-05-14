@@ -14,7 +14,7 @@ class BudgetService:
 
         # Period validation
         period = data.get("period")
-        if period not in ["weekly", "monthly", "custom"]:
+        if period not in ["daily", "weekly", "monthly", "yearly"]:
             return jsonify({"error": "Invalid period"}), 400
 
         budget = {
@@ -23,7 +23,7 @@ class BudgetService:
             "period": period,
             "category": data.get("category", "overall"),
             "start_date": data.get("start_date", str(datetime.now().date())),
-            "end_date": data.get("end_date") if period == "custom" else None
+            "end_date": None  # Removed custom period logic since we now use standard periods
         }
 
         cls.firebase.db.collection("budgets").add(budget)
